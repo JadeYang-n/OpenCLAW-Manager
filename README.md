@@ -273,7 +273,7 @@ pnpm tauri build
 
 | 渠道 | 说明 |
 |------|------|
-| **GitHub Issues** | [Bug 报告/功能建议](https://github.com/openclaw-manager/openclaw-manager/issues) |
+| **GitHub Issues** | Bug 报告/功能建议（仓库创建后启用） |
 | **Email** | 1762961769@qq.com |
 
 ---
