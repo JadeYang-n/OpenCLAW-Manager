@@ -1,0 +1,33 @@
+# 聊天助手配置模板
+metadata:
+  openclaw_version: ">=2026.2.0 <2027.0.0"
+  template_version: "1.0.0"
+
+# IM 渠道配置
+im:
+  platform: 飞书
+  app_id: "your_app_id"
+  app_secret: "${ENV:FEISHU_APP_SECRET}"
+  webhook_port: 8080
+
+# LLM 配置
+llm:
+  provider: OpenAI
+  api_key: "${ENV:OPENAI_API_KEY}"
+  model: gpt-4o
+  base_url: ""
+  max_tokens: 4000
+  use_env_var: true
+
+# 记忆配置
+memory:
+  memory_file: "~/.openclaw/memory.json"
+  max_context_tokens: 8000
+  enable_smart_pruning: false
+
+# 高级配置
+advanced:
+  log_level: "info"
+  http_proxy: ""
+  data_dir: "~/.openclaw"
+  openclaw_version: "2026.2.0"

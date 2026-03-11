@@ -1,0 +1,25 @@
+{
+  "models": {
+    "claude-sonnet-4": {
+      "input": 3,
+      "output": 15
+    },
+    "claude-opus-4": {
+      "input": 15,
+      "output": 75
+    },
+    "gpt-4o": {
+      "input": 5,
+      "output": 15
+    },
+    "deepseek-chat": {
+      "input": 1,
+      "output": 2
+    },
+    "qwen-max": {
+      "input": 0.5,
+      "output": 1
+    }
+  },
+  "updated_at": "2026-03-01"
+}
