@@ -5,7 +5,7 @@
 **AI Agent 时代的企业级管控平台 —— 做 AI Agent 时代的 K8s**
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-Alpha-orange.svg)](https://github.com/openclaw-manager/openclaw-manager/releases)
+[![Version](https://img.shields.io/badge/version-Alpha-orange.svg)](https://github.com/YOUR_USERNAME/ocm-manager/releases)
 [![Tauri](https://img.shields.io/badge/Tauri-v2.0-24C8DB?logo=tauri)](https://tauri.app/)
 [![React](https://img.shields.io/badge/React-19-61DAFB?logo=react)](https://react.dev/)
 [![Rust](https://img.shields.io/badge/Rust-stable-DEA584?logo=rust)](https://www.rust-lang.org/)
@@ -136,7 +136,7 @@ docker run -d \
 
 ```bash
 # 克隆仓库
-git clone https://github.com/openclaw-manager/openclaw-manager.git
+git clone https://github.com/YOUR_USERNAME/ocm-manager.git
 cd openclaw-manager
 
 # 安装依赖
@@ -169,16 +169,16 @@ pnpm tauri build
 ## 🗺️ 开发路线图
 
 ### ✅ v1.0 - 基础权限（Alpha 已发布）
-- [x] 用户登录/登出（JWT 认证）
-- [x] 5 角色权限系统
-- [x] 实例管理 CRUD
-- [x] 操作审计日志
-- [x] Token 分析页面
+- [√] 用户登录/登出（JWT 认证）
+- [√] 5 角色权限系统
+- [√] 实例管理 CRUD
+- [√] 操作审计日志
+- [√] Token 分析页面
 
 ### 🔄 v1.5 - 部门隔离（开发中）
-- [x] 部门管理 API
-- [x] 数据库设计
-- [ ] 实例 - 部门绑定 UI
+- [√] 部门管理 API
+- [√] 数据库设计
+- [√] 实例 - 部门绑定 UI
 - [ ] 用户 - 部门绑定 UI
 - [ ] Token 分析 - 部门视图
 
