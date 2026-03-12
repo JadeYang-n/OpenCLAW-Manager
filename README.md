@@ -107,19 +107,19 @@ OpenCLaw is a powerful personal AI assistant framework, but **enterprises face t
 ## 📸 功能预览
 ## 📸 Feature Preview
 
-![实例管理(Instance Management)](https://github.com/JadeYang-n/OpenCLAW-Manager/blob/master/1.png)
+![实例管理 Instance Management](https://github.com/JadeYang-n/OpenCLAW-Manager/blob/master/1.png)
 
-![仪表盘(Dashboard)](https://github.com/JadeYang-n/OpenCLAW-Manager/blob/master/2.png)
+![仪表盘 Dashboard](https://github.com/JadeYang-n/OpenCLAW-Manager/blob/master/2.png)
 
-![部署向导 (Deployment Wizard)](https://github.com/JadeYang-n/OpenCLAW-Manager/blob/master/3.png)
+![部署向导 Deployment Wizard](https://github.com/JadeYang-n/OpenCLAW-Manager/blob/master/3.png)
 
-![配置管理(Configuration Management)](https://github.com/JadeYang-n/OpenCLAW-Manager/blob/master/4.png)
+![配置管理 Configuration Management](https://github.com/JadeYang-n/OpenCLAW-Manager/blob/master/4.png)
 
-![skills管理 (Skills Management)](https://github.com/JadeYang-n/OpenCLAW-Manager/blob/master/5.png)
+![skills管理 Skills Management](https://github.com/JadeYang-n/OpenCLAW-Manager/blob/master/5.png)
 
-![Token 分析(Token Analysis)](https://github.com/JadeYang-n/OpenCLAW-Manager/blob/master/6.png)
+![Token 分析 Token Analysis](https://github.com/JadeYang-n/OpenCLAW-Manager/blob/master/6.png)
 
-![用户管理 (User Management)](https://github.com/JadeYang-n/OpenCLAW-Manager/blob/master/7.png)
+![用户管理 User Management](https://github.com/JadeYang-n/OpenCLAW-Manager/blob/master/7.png)
 
 ---
 
