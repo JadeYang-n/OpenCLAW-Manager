@@ -4,14 +4,40 @@ use aes_gcm::{
 };
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
 use rand::RngCore;
+use std::env;
+use std::sync::OnceLock;
 
 /// 加密密钥（32 字节 = 256 位）
-/// TODO: 生产环境应该从环境变量或密钥管理服务获取
-const ENCRYPTION_KEY: &[u8; 32] = b"openclaw_manager_master_key_0000";
+/// 从环境变量 OPENCLAW_MASTER_KEY 读取，必须是 32 字节的 base64 编码
+/// 如果未设置，则生成随机密钥（仅用于开发，生产环境必须设置）
+static ENCRYPTION_KEY: OnceLock<[u8; 32]> = OnceLock::new();
+
+fn get_encryption_key() -> &'static [u8; 32] {
+    ENCRYPTION_KEY.get_or_init(|| {
+        // 尝试从环境变量读取
+        if let Ok(key_base64) = env::var("OPENCLAW_MASTER_KEY") {
+            // 解码 base64 密钥
+            let key_bytes = BASE64.decode(&key_base64).expect("无效的密钥格式：必须是 32 字节的 base64 编码");
+            if key_bytes.len() != 32 {
+                panic!("密钥长度错误：必须是 32 字节（256 位），当前 {} 字节", key_bytes.len());
+            }
+            let mut key = [0u8; 32];
+            key.copy_from_slice(&key_bytes);
+            key
+        } else {
+            // 开发环境：生成随机密钥（警告：重启后密钥会变，无法解密旧数据）
+            eprintln!("⚠️  警告：未设置 OPENCLAW_MASTER_KEY 环境变量，使用随机密钥");
+            eprintln!("   生产环境必须设置：OPENCLAW_MASTER_KEY=<32 字节的 base64 编码>");
+            let mut key = [0u8; 32];
+            OsRng.fill_bytes(&mut key);
+            key
+        }
+    })
+}
 
 /// 加密数据（AES-256-GCM）
 pub fn encrypt(data: &str) -> Result<String, String> {
-    let cipher = Aes256Gcm::new_from_slice(ENCRYPTION_KEY)
+    let cipher = Aes256Gcm::new_from_slice(get_encryption_key())
         .map_err(|e| format!("初始化加密器失败：{}", e))?;
     
     // 生成随机 nonce（12 字节）
@@ -47,7 +73,7 @@ pub fn decrypt(encrypted_base64: &str) -> Result<String, String> {
     let nonce_bytes = &combined[..12];
     let ciphertext = &combined[12..];
     
-    let cipher = Aes256Gcm::new_from_slice(ENCRYPTION_KEY)
+    let cipher = Aes256Gcm::new_from_slice(get_encryption_key())
         .map_err(|e| format!("初始化加密器失败：{}", e))?;
     
     let nonce = Nonce::from_slice(nonce_bytes);
