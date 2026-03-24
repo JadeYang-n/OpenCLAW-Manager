@@ -327,7 +327,7 @@ pnpm tauri build
 | **Outdated Documentation** | Documentation may not keep up with code updates | Check the latest commits and Issues |
 | **Production Risks** | Not suitable for production environments | Wait for Beta/RC versions for production use |
 
-**更新频率：** 预计每周 1-2 次更新，持续迭代至 1.0.* 版本。
+**更新频率：** 预计每月 1-2 次更新，持续迭代至 1.0.* 版本。
 **Update Frequency:** Expected 1-2 updates per week, continuous iteration until version 1.0.*.
 
 ---
