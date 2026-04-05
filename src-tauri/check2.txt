@@ -1,0 +1,70 @@
+    Checking ocm-manager v0.1.0 (C:\Users\vip\.openclaw-autoclaw\workspace\OpenCLAW Manager\ocm-manager\src-tauri)
+warning: unused imports: `PortResult` and `ScanMode`
+ --> src\commands\security.rs:5:37
+  |
+5 | use crate::services::port_scanner::{PortResult, PortStatus, ScanMode};
+  |                                     ^^^^^^^^^^              ^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `DiscoveredInstance as InternalDiscoveredInstance`
+ --> src\commands\security.rs:6:43
+  |
+6 | use crate::services::instance_discovery::{DiscoveredInstance as InternalDiscoveredInstance, InstanceStatus, PlatformType};
+  |                                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `Instant`
+ --> src\services\instance_discovery.rs:3:27
+  |
+3 | use std::time::{Duration, Instant};
+  |                           ^^^^^^^
+
+warning: unused imports: `PortResult`, `PortScanner`, `PortStatus`, and `ScanMode`
+ --> src\services\mod.rs:9:24
+  |
+9 | pub use port_scanner::{PortScanner, PortResult, PortStatus, ScanMode};
+  |                        ^^^^^^^^^^^  ^^^^^^^^^^  ^^^^^^^^^^  ^^^^^^^^
+
+warning: unused imports: `DiscoveredInstance`, `InstanceDiscoveryService`, `InstanceStatus`, and `PlatformType`
+  --> src\services\mod.rs:10:30
+   |
+10 | pub use instance_discovery::{InstanceDiscoveryService, DiscoveredInstance, InstanceStatus, PlatformType};
+   |                              ^^^^^^^^^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^  ^^^^^^^^^^^^
+
+warning: unused imports: `BlacklistReason`, `TokenBlacklistRecord`, and `TokenBlacklistService`
+  --> src\services\mod.rs:11:27
+   |
+11 | pub use token_blacklist::{TokenBlacklistService, TokenBlacklistRecord, BlacklistReason};
+   |                           ^^^^^^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^
+
+error[E0308]: mismatched types
+   --> src\commands\audit.rs:141:15
+    |
+141 |         .map(|(id, timestamp, user_id, username, resource, operation, result, risk_level, _signature)| {
+    |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |               |
+    |               expected `Vec<...>`, found `(_, _, _, _, _, _, _, _, _)`
+    |               expected due to this
+    |
+    = note: expected struct `Vec<(String, String, String, String, String, String, ..., ..., ...)>`
+                found tuple `(_, _, _, _, _, _, _, _, _)`
+    = note: the full name for the type has been written to 'C:\Users\vip\.openclaw-autoclaw\workspace\OpenCLAW Manager\ocm-manager\src-tauri\target\release\deps\ocm_manager-1c83eee97b2c7e35.long-type-8579127055729985648.txt'
+    = note: consider using `--verbose` to print the full type name to the console
+
+warning: unused variable: `user_id`
+   --> src\services\db.rs:864:46
+    |
+864 | pub fn get_visible_skills(conn: &Connection, user_id: &str, role: &str) -> Result<Vec<serde_json::Value>> {
+    |                                              ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_user_id`
+    |
+    = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `start_time`
+   --> src\services\port_scanner.rs:107:13
+    |
+107 |         let start_time = std::time::Instant::now();
+    |             ^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_start_time`
+
+For more information about this error, try `rustc --explain E0308`.
+warning: `ocm-manager` (bin "ocm-manager") generated 8 warnings
+error: could not compile `ocm-manager` (bin "ocm-manager") due to 1 previous error; 8 warnings emitted

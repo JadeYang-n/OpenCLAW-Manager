@@ -1,0 +1,4 @@
+[build]
+# 忽略未使用变量警告（这些是开发过程中的临时状态）
+noUnusedLocals = false
+noUnusedParameters = false

@@ -1,0 +1,45 @@
+{
+  "$schema": "https://schema.tauri.app/config/2.0",
+  "identifier": "com.openclaw.manager",
+  "build": {
+    "frontendDist": "../apps/web/dist",
+    "devUrl": "http://localhost:5173",
+    "beforeDevCommand": "pnpm --filter ocm-web dev",
+    "beforeBuildCommand": "pnpm --filter ocm-web build"
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["msi", "dmg", "deb", "appimage"],
+    "resources": [
+      "../packages/node-services/**/*",
+      "../resources/**/*"
+    ],
+    "windows": {
+      "certificateThumbprint": null,
+      "digestAlgorithm": "sha256",
+      "timestampUrl": "http://timestamp.digicert.com"
+    },
+    "icon": [
+      "icons/icon.ico"
+    ]
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "OpenClaw Manager",
+        "width": 1200,
+        "height": 800,
+        "resizable": true,
+        "fullscreen": false
+      }
+    ],
+    "security": {
+      "capabilities": ["default"]
+    }
+  },
+  "plugins": {
+    "opener": {
+      "requireLiteralLeadingDot": true
+    }
+  }
+}

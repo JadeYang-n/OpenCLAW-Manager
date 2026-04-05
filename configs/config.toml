@@ -1,0 +1,45 @@
+# OpenCLAW Manager 配置文件
+# 请使用 TOML 格式编辑
+# 位置: data/config.toml
+
+[server]
+# 网络服务配置
+host = "127.0.0.1"
+port = 3456
+
+[database]
+# 数据库配置
+path = "data/ocm.db"
+backup_path = "data/backups"
+
+[security]
+# 安全配置
+# 主密钥（32字节 base64 编码）
+master_key = "YOUR_MASTER_KEY_HERE"
+session_timeout_minutes = 30
+
+[audit]
+# 审计日志配置
+enabled = true
+retention_days = 365
+max_log_size_mb = 100
+
+[logging]
+# 日志配置
+level = "info"
+dir = "logs"
+max_files = 10
+
+[node_service]
+# Node.js 服务配置
+url = "http://localhost:3456"
+health_check_interval_seconds = 10
+
+[deployment]
+# 部署配置
+default_mode = "windows"
+install_paths = {
+    windows = "C:\\Program Files\\OpenCLAW",
+    wsl2 = "/opt/openclaw",
+    docker = "/opt/openclaw"
+}

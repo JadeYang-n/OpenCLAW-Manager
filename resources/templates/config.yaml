@@ -1,0 +1,31 @@
+# OpenCLAW 配置文件
+
+# 网关配置
+gateway:
+  port: {{webPort}}
+  host: 0.0.0.0
+
+# IM 渠道配置
+channel:
+  type: {{imPlatform}}
+  app_id: {{feishuAppId}}
+  app_secret: {{feishuAppSecret}}
+  webhook_port: {{webhookPort}}
+
+# LLM 配置
+llm:
+  provider: openai  # 国内厂商都使用 OpenAI 兼容接口
+  api_key: {{apiKey}}
+  model: {{model}}
+  base_url: {{getBaseUrl(llmProvider)}}
+  max_tokens: 4000
+
+# 记忆配置
+memory:
+  path: ~/.openclaw/data/MEMORY.md
+  max_tokens: 8000
+
+# 日志配置
+logging:
+  level: info
+  file: ~/.openclaw/logs/openclaw.log
