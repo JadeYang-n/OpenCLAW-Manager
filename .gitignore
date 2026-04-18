@@ -1,52 +1,164 @@
-# Dependencies
+# =============================================================================
+# OpenCLAW Manager .gitignore
+# Updated: 2026-04-16
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Dependencies (Node.js & Rust)
+# -----------------------------------------------------------------------------
 node_modules/
 .pnpm-store/
+vendor/
 
-# Build outputs
-dist/
-build/
+# -----------------------------------------------------------------------------
+# Build Outputs (Rust & TypeScript)
+# -----------------------------------------------------------------------------
+# Rust target directory (main build output - 6.25 GB)
+src-tauri/target/
 target/
 **/target/**
 
-# Tauri
-src-tauri/target/**
+# Rust compilation artifacts
+*.rlib
+*.rmeta
+*.pdb
+*.dll
+*.exe
+*.so
+*.dylib
 
-# Logs
+# TypeScript/JavaScript build outputs
+dist/
+build/
+out/
+
+# -----------------------------------------------------------------------------
+# Tauri Specific
+# -----------------------------------------------------------------------------
+src-tauri/target/**
+src-tauri/dev/**
+src-tauri/icons/*.png
+src-tauri/icons/*.icns
+src-tauri/icons/*.ico
+
+# -----------------------------------------------------------------------------
+# Logs & Debug
+# -----------------------------------------------------------------------------
 *.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
+lerna-debug.log*
 
-# Editor directories and files
+# -----------------------------------------------------------------------------
+# IDE & Editor
+# -----------------------------------------------------------------------------
 .vscode/*
 !.vscode/extensions.json
-.idea
-.DS_Store
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+.idea/
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
+*.sublime-*
 
-# Environment
+# IDE skills and rules
+.qoder/
+.trae/
+
+# -----------------------------------------------------------------------------
+# Environment Variables
+# -----------------------------------------------------------------------------
 .env
 .env.local
 .env.*.local
+.env.development
+.env.production
 
-# Testing
+# -----------------------------------------------------------------------------
+# Testing & Coverage
+# -----------------------------------------------------------------------------
 coverage/
+.nyc_output/
+test-results/
+playwright-report/
 
-# Temporary files
+# -----------------------------------------------------------------------------
+# Temporary Files
+# -----------------------------------------------------------------------------
 tmp/
 temp/
+.tmp/
+.temp/
+.cache/
+.parcel-cache/
 
-# OpenCLAW workspace (should not be committed)
+# -----------------------------------------------------------------------------
+# Database Files (SQLite)
+# -----------------------------------------------------------------------------
+*.db
+*.sqlite
+*.sqlite3
+data/*.db
+src/data/
+src/*/data/
+
+# -----------------------------------------------------------------------------
+# Log Files
+# -----------------------------------------------------------------------------
+*.log
+logs/
+server.log
+server.error.log
+
+# -----------------------------------------------------------------------------
+# OpenCLAW Workspace (should not be committed)
+# -----------------------------------------------------------------------------
 ../../.openclaw/
 ../../.opencode/
 ../../config/
 ../../memory/
 ../../research/
 
-# OS
+# -----------------------------------------------------------------------------
+# Operating System Files
+# -----------------------------------------------------------------------------
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
 Thumbs.db
+desktop.ini
+
+# -----------------------------------------------------------------------------
+# Other Common Ignores
+# -----------------------------------------------------------------------------
+# Package locks (uncomment if you want to ignore them)
+# package-lock.json
+# yarn.lock
+# pnpm-lock.yaml
+
+# Documentation builds
+docs/_build/
+site/
+
+# Internal development docs (keep only README.md, LICENSE, etc.)
+docs/
+!docs/README.md
+!docs/CONTRIBUTING.md
+!docs/SECURITY.md
+
+# Backup files
+*.bak
+*.backup
+*.old
+
+# Windows reserved files
+nul

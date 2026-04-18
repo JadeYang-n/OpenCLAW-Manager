@@ -1,13 +1,15 @@
 // API service for backend communication (B/S 架构 - v5.7)
 import { useAuthStore } from '../stores/authStore'
 
-const API_BASE_URL = 'http://localhost:8080/api/v1';
+// 使用环境变量配置 API 地址，支持开发和生产环境
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api/v1';
 
 // Generic fetch function with error handling
 export async function fetchAPI<T = unknown>(endpoint: string, options: RequestInit = {}): Promise<T> {
   try {
     // Get token from auth store
     const token = useAuthStore.getState().getToken()
+    console.log('[API] Request to:', endpoint, 'Token present:', !!token)
     
     // 确保 endpoint 以 / 开头
     const normalizedEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
@@ -21,10 +23,18 @@ export async function fetchAPI<T = unknown>(endpoint: string, options: RequestIn
       },
     });
 
+    console.log('[API] Response status:', response.status, 'for:', endpoint)
+
     // Handle 401 Unauthorized
     if (response.status === 401) {
-      useAuthStore.getState().logout()
-      window.location.href = '/login'
+      console.log('[API] 401 Unauthorized for:', endpoint, 'Timestamp:', Date.now())
+      console.log('[API] Token present:', !!token)
+      console.log('[API] Going to login in 3 seconds...')
+      // 延迟跳转，让用户能看清日志
+      setTimeout(() => {
+        useAuthStore.getState().logout()
+        window.location.href = '/login'
+      }, 3000)
       throw new Error('Unauthorized. Please login again.')
     }
 
@@ -43,6 +53,9 @@ export async function fetchAPI<T = unknown>(endpoint: string, options: RequestIn
 export const skillsAPI = {
   getSkills: () => {
     return fetchAPI('/skills');
+  },
+  getInstalledSkills: () => {
+    return fetchAPI('/skills/installed');
   },
   getSkill: (id: string) => {
     return fetchAPI(`/skills/${id}`);
@@ -72,6 +85,78 @@ export const skillsAPI = {
       method: 'POST',
       body: JSON.stringify({ version_id: versionId }),
     });
+  },
+  installSkill: (id: string, data?: { version?: string }) => {
+    return fetchAPI(`/skills/${id}/install`, {
+      method: 'POST',
+      body: JSON.stringify(data || {}),
+    });
+  },
+  uninstallSkill: (id: string) => {
+    return fetchAPI(`/skills/${id}/uninstall`, {
+      method: 'POST',
+    });
+  },
+  updateSkillStatus: (id: string, data: { enabled: boolean }) => {
+    return fetchAPI(`/skills/${id}/status`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  },
+
+  // 可见技能
+  getVisibleSkills: () => {
+    return fetchAPI('/skills/visible');
+  },
+
+  // Skill Store API
+  getSkillStores: () => {
+    return fetchAPI('/skill-stores');
+  },
+  getSkillStoreById: (id: string) => {
+    return fetchAPI(`/skill-stores/${id}`);
+  },
+  createSkillStore: (data: any) => {
+    return fetchAPI('/skill-stores', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+  updateSkillStore: (id: string, data: any) => {
+    return fetchAPI(`/skill-stores/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  },
+  deleteSkillStore: (id: string) => {
+    return fetchAPI(`/skill-stores/${id}`, {
+      method: 'DELETE',
+    });
+  },
+  invokeSkill: (skillId: string, params: Record<string, unknown>) => {
+    return fetchAPI(`/skill-stores/${skillId}/invoke`, {
+      method: 'POST',
+      body: JSON.stringify(params),
+    });
+  },
+  getSkillStoreStats: (skillId: string) => {
+    return fetchAPI(`/skill-stores/${skillId}/stats`);
+  },
+
+  // 审核相关
+  getReviewPendingList: () => {
+    return fetchAPI('/skill-reviews');
+  },
+  executeReview: (data: { skill_id: string; result: string; comments?: string }) => {
+    return fetchAPI('/skill-reviews/execute', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  // 统计相关
+  getSkillLeaderboard: () => {
+    return fetchAPI('/skills/leaderboard');
   },
 };
 
@@ -331,6 +416,105 @@ export const securityAPI = {
   checkConfig: (data: Record<string, unknown>) => {
     return fetchAPI('/security/check-config', {
       method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+};
+
+// Notifications API
+export const notificationsAPI = {
+  getNotifications: () => {
+    return fetchAPI('/notifications');
+  },
+  getUnreadCount: () => {
+    return fetchAPI('/notifications/unread/count');
+  },
+  markAsRead: (id: string) => {
+    return fetchAPI(`/notifications/${id}/read`, {
+      method: 'PUT',
+    });
+  },
+  markAllAsRead: () => {
+    return fetchAPI('/notifications/all/read', {
+      method: 'PUT',
+    });
+  },
+};
+
+// Skill Feedback API
+export const skillFeedbackAPI = {
+  createFeedback: (data: {
+    skill_id: string;
+    rating?: number;
+    comment: string;
+    contact_info?: string;
+  }) => {
+    return fetchAPI('/skill-feedbacks', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+  getSkillFeedbacks: (skillId: string) => {
+    return fetchAPI(`/skill-feedbacks/skill/${skillId}`);
+  },
+  getReceivedFeedbacks: () => {
+    return fetchAPI('/skill-feedbacks/my/received');
+  },
+  getSentFeedbacks: () => {
+    return fetchAPI('/skill-feedbacks/my/sent');
+  },
+  markFeedbackAsRead: (id: string) => {
+    return fetchAPI(`/skill-feedbacks/${id}/read`, {
+      method: 'PUT',
+    });
+  },
+  replyFeedback: (id: string, data: { reply_content: string }) => {
+    return fetchAPI(`/skill-feedbacks/${id}/reply`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  },
+};
+
+// Gateway Config API
+export const gatewayConfigAPI = {
+  autoConfigure: (data: {
+    instance_id: string;
+    gateway_path?: string;
+    ocm_url?: string;
+    restart_gateway?: boolean;
+  }) => {
+    return fetchAPI('/gateway/config/auto-configure', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+  batchConfigure: (data: {
+    instance_ids: string[];
+    gateway_path?: string;
+    ocm_url?: string;
+    restart_gateway?: boolean;
+  }) => {
+    return fetchAPI('/gateway/config/batch-configure', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+  getConfigStatus: () => {
+    return fetchAPI('/gateway/config/status');
+  },
+  restoreBackup: (instanceId: string) => {
+    return fetchAPI('/gateway/config/restore', {
+      method: 'POST',
+      body: JSON.stringify({ instance_id: instanceId }),
+    });
+  },
+  getInstanceConfig: (instanceId: string) => {
+    return fetchAPI(`/instances/${instanceId}/gateway-config`);
+  },
+  updateInstanceConfig: (instanceId: string, data: any) => {
+    return fetchAPI(`/instances/${instanceId}/gateway-config`, {
+      method: 'PUT',
       body: JSON.stringify(data),
     });
   },

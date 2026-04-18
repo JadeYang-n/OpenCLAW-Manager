@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { toast } from 'react-hot-toast'
 import { useAuthStore } from '../../stores/authStore'
 import * as deptApi from '../departments/api'
@@ -22,6 +23,7 @@ interface Instance {
   created_at?: string
   departments?: Department[]
   enabled?: boolean
+  gateway_online?: boolean
 }
 
 interface Config {
@@ -59,8 +61,11 @@ interface CreateInstanceForm {
 }
 
 export default function InstancesPage() {
+  console.log('[InstancesPage] Component mounted/rendered')
   const { getToken } = useAuthStore()
   const [instances, setInstances] = useState<Instance[]>([])
+  console.log('[InstancesPage] Token from store:', getToken())
+  const navigate = useNavigate()
   const [loading, setLoading] = useState(true)
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [creating, setCreating] = useState(false)
@@ -148,9 +153,11 @@ export default function InstancesPage() {
   }, [])
 
   const loadInstances = useCallback(async () => {
+    console.log('[loadInstances] Called')
     try {
       const list = await instancesAPI.getInstances()
       const instancesData = Array.isArray(list) ? list : (list as { data?: Array<{}> })?.data
+      console.log('[loadInstances] Loaded instances:', instancesData)
       setInstances(instancesData || [])
     } catch (error) {
       console.error('加载实例失败:', error)
@@ -413,24 +420,25 @@ export default function InstancesPage() {
       loadInstances()
       toast.success(`✅ 实例添加成功！`)
       
-      // 成功后清空自动 token，下次扫描会重新获取
-      setAutoGatewayToken('')
+      // 成功后保持 autoGatewayToken，方便下次添加
+      // setAutoGatewayToken('')
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error)
       let friendlyMsg = errorMsg
       if (errorMsg.includes("localhost:5173") || errorMsg.includes("8080")) {
-        friendlyMsg = "无法连接到服务器，请确保后端服务正在运行"
+        friendlyMsg = "无法连接到服务器,请确保后端服务正在运行"
       }
       toast.error(`❌ 添加失败: ${friendlyMsg}`)
     }
   }, [autoGatewayToken, loadInstances])
 
   useEffect(() => {
+    console.log('[InstancesPage] useEffect running - loading data')
     loadInstances()
     loadDepartments()
     loadConfigs()
     loadSkills()
-  }, [loadInstances, loadDepartments, loadConfigs, loadSkills])
+  }, [])
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault()
@@ -1135,7 +1143,7 @@ export default function InstancesPage() {
                         )}
                       </td>
                       <td className="px-6 py-4">
-                        <StatusBadge status={inst.status === 'running' || inst.status === 'online' ? 'success' : 'error'} />
+                        <StatusBadge status={inst.gateway_online ? 'success' : 'error'} />
                       </td>
                       <td className="px-6 py-4 text-right">
                         <Button
@@ -1242,6 +1250,14 @@ export default function InstancesPage() {
                     </td>
                     <td className="px-6 py-4 text-right">
                       <div className="flex justify-end gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => navigate(`/instances/${instance.id}/gateway-config`)}
+                          className="text-xs"
+                        >
+                          配置 Gateway
+                        </Button>
                         <Button
                           variant="default"
                           size="sm"

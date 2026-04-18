@@ -4,13 +4,13 @@ import * as deptApi from '../departments/api'
 import type { Department } from '../departments/types'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { DollarSign, TrendingUp, Clock, Filter, Download, Settings, BarChart3 } from 'lucide-react'
+import { DollarSign, TrendingUp, Clock, Filter, Download, BarChart3, PieChart, BarChart2, Calendar, Users, History } from 'lucide-react'
 
 interface TokenUsage {
   id: string
   instance_id: string
   instance_name: string
-  timestamp: string
+  reported_at: string
   model: string
   prompt_tokens: number
   completion_tokens: number
@@ -78,7 +78,7 @@ export default function TokenAnalysisPage() {
       const list = await deptApi.listDepartments(token)
       setDepartments(list)
     } catch (error) {
-      console.error('鍔犺浇部门澶辫触:', error)
+      console.error('加载部门失败:', error)
     }
   }, [getToken])
 
@@ -86,7 +86,7 @@ export default function TokenAnalysisPage() {
     try {
       setLoading(true)
       
-      // 璋冪敤鍚庣API鑾峰彇Token usage鏁版嵁
+      // 调用后端API获取Token usage数据
       const token = localStorage.getItem('auth_token')
       const response = await fetch('http://localhost:8080/api/v1/gateway/token/usage', {
         method: 'GET',
@@ -105,13 +105,13 @@ export default function TokenAnalysisPage() {
       if (data.success) {
         setUsage(data.data || [])
         
-        // 浠庣湡瀹炴暟鎹绠楁瘡鏃ョ粺璁?
+        // 从实际数据计算每日统计
         const dailyStatsMap = new Map<string, DailyStats>()
         const deptStatsMap = new Map<string, DepartmentStats>()
         
         ;(data.data || []).forEach((record: any) => {
-          // 鎻愬彇日期锛堜粠 "2026-03-10 23:00:00" 鎻愬彇 "03-10"锛?
-          const dateKey = record.timestamp.split(' ')[0].replace(/-/g, '-').substr(5)
+          // 提取日期（从 "2026-03-10 23:00:00" 提取 "03-10"）
+          const dateKey = (record.reported_at || record.timestamp).split(' ')[0].replace(/-/g, '-').substr(5)
           const existingDaily = dailyStatsMap.get(dateKey) || {
             date: dateKey,
             total_tokens: 0,
@@ -123,7 +123,7 @@ export default function TokenAnalysisPage() {
           existingDaily.request_count += 1
           dailyStatsMap.set(dateKey, existingDaily)
 
-          // 璁＄畻部门缁熻
+          // 计算部门统计
           if (record.department_id && record.department_name) {
             const existingDept = deptStatsMap.get(record.department_id) || {
               department_id: record.department_id,
@@ -143,16 +143,16 @@ export default function TokenAnalysisPage() {
           }
         })
 
-        // 杞崲涓烘暟缁勫苟鎸夋棩鏈熸帓搴忥紙鏈€鏂扮殑鍦ㄥ墠锛?
+        // 转换为数组并按日期排序（最新的在前）
         const sortedDaily = Array.from(dailyStatsMap.values())
           .sort((a, b) => b.date.localeCompare(a.date))
         setDailyStats(sortedDaily)
 
-        // 杞崲部门缁熻涓烘暟缁?
+        // 转换部门统计为数组
         setDepartmentStats(Array.from(deptStatsMap.values()))
       }
     } catch (error) {
-      console.error('鍔犺浇 Token 鏁版嵁澶辫触:', error)
+      console.error('加载 Token 数据失败:', error)
       setUsage([])
       setDailyStats([])
       setDepartmentStats([])
@@ -179,16 +179,16 @@ export default function TokenAnalysisPage() {
   }
 
   function getModelIcon(model: string) {
-    if (model.includes('gpt-4')) return '馃敺'
-    if (model.includes('gpt-3.5')) return '馃敼'
-    if (model.includes('claude')) return '馃煟'
-    return ' sơ '
+    if (model.includes('gpt-4')) return 'GPT-4'
+    if (model.includes('gpt-3.5')) return 'GPT-3.5'
+    if (model.includes('claude')) return 'Claude'
+    return model
   }
 
   // Export data function
   const exportData = () => {
-    console.log('瀵煎嚭鏁版嵁鍒癈SV')
-    // TODO: 瀹炵幇CSV瀵煎嚭閫昏緫
+    console.log('导出数据到CSV')
+    // TODO: 实现CSV导出功能
   }
 
   // Load data function
@@ -196,9 +196,6 @@ export default function TokenAnalysisPage() {
     loadTokenData()
     loadDepartments()
   }
-
-  // API Key configuration function
-  const [showSetting, setShowSetting] = useState(false)
 
   if (loading) {
     return <div className="p-6">加载中..</div>
@@ -224,9 +221,9 @@ export default function TokenAnalysisPage() {
       {/* Header Section */}
       <div className="mb-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Token 鍒嗘瀽</h1>
+          <h1 className="text-2xl font-bold text-foreground">Token 分析</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            鏌ョ湅鍚勫疄渚嬬殑 Token 浣跨敤鎯呭喌鍜屾垚鏈垎鏋?
+            查看各实例的 Token 使用情况和成本分析
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -253,10 +250,6 @@ export default function TokenAnalysisPage() {
             <Download className="w-4 h-4 mr-2" />
             导出CSV
           </Button>
-          <Button variant="primary" onClick={() => setShowSetting(true)}>
-            <Settings className="w-4 h-4 mr-2" />
-            设置API Key
-          </Button>
         </div>
       </div>
 
@@ -265,16 +258,16 @@ export default function TokenAnalysisPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-foreground">
-              馃挵 total_cost
+              <DollarSign className="inline-block w-4 h-4 mr-1" /> 总成本
             </CardTitle>
             <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-foreground">
-              ${getTotalCost()}
+              ¥{getTotalCost()}
             </div>
             <p className="text-xs text-muted-foreground mt-1">
-              杩囧幓 {selectedPeriod === '7d' ? '7' : selectedPeriod === '30d' ? '30' : '90'} 澶?
+              过去 {selectedPeriod === '7d' ? '7' : selectedPeriod === '30d' ? '30' : '90'} 天
             </p>
           </CardContent>
         </Card>
@@ -282,7 +275,7 @@ export default function TokenAnalysisPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-foreground">
-              馃敘 Token 总量
+              <BarChart2 className="inline-block w-4 h-4 mr-1" /> Token 总量
             </CardTitle>
             <BarChart3 className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
@@ -299,7 +292,7 @@ export default function TokenAnalysisPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-foreground">
-              馃搳 request_count
+              <TrendingUp className="inline-block w-4 h-4 mr-1" /> 请求次数
             </CardTitle>
             <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
@@ -319,21 +312,21 @@ export default function TokenAnalysisPage() {
         <Card className="mb-6">
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-foreground">馃搳 缁熻缁村害</h2>
+              <h2 className="text-lg font-semibold text-foreground"><Filter className="inline-block w-5 h-5 mr-2" /> 统计维度</h2>
               <div className="flex rounded-md shadow-sm">
                 <Button
                   onClick={() => setShowDepartmentView(false)}
                   variant={!showDepartmentView ? 'default' : 'outline'}
                   className={!showDepartmentView ? 'bg-blue-600 text-white hover:bg-blue-700' : ''}
                 >
-                  鎸夋椂闂?
+                  按时间
                 </Button>
                 <Button
                   onClick={() => setShowDepartmentView(true)}
                   variant={showDepartmentView ? 'default' : 'outline'}
                   className={showDepartmentView ? 'bg-blue-600 text-white hover:bg-blue-700' : ''}
                 >
-                  鎸夐儴闂?
+                  按部门
                 </Button>
               </div>
             </div>
@@ -346,7 +339,7 @@ export default function TokenAnalysisPage() {
         <Card className="mb-6">
           <CardHeader>
             <CardTitle className="text-lg font-semibold text-foreground">
-              馃彚 部门鎴愭湰缁熻
+              <PieChart className="inline-block w-5 h-5 mr-2" /> 部门成本统计
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -357,8 +350,8 @@ export default function TokenAnalysisPage() {
                   <XAxis type="number" />
                   <YAxis dataKey="name" type="category" width={100} />
                   <Tooltip />
-                  <Bar dataKey="value" fill={CHART_COLORS.blue} name="鎴愭湰" />
-                  <Bar dataKey="tokens" fill={CHART_COLORS.green} name="total_tokens" />
+                  <Bar dataKey="value" fill={CHART_COLORS.blue} name="成本" />
+                  <Bar dataKey="tokens" fill={CHART_COLORS.green} name="token总量" />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -370,7 +363,7 @@ export default function TokenAnalysisPage() {
                   <th className="px-6 py-3 text-right font-medium text-foreground">实例数</th>
                   <th className="px-6 py-3 text-right font-medium text-foreground">请求次数</th>
                   <th className="px-6 py-3 text-right font-medium text-foreground">Token 总量</th>
-                  <th className="px-6 py-3 text-right font-medium text-foreground">total_cost</th>
+                  <th className="px-6 py-3 text-right font-medium text-foreground">成本</th>
                   <th className="px-6 py-3 text-right font-medium text-foreground">占比</th>
                 </tr>
               </thead>
@@ -410,7 +403,7 @@ export default function TokenAnalysisPage() {
         <Card className="mb-6">
           <CardHeader>
             <CardTitle className="text-lg font-semibold text-foreground">
-              馃搱 每日趋势
+              <BarChart3 className="inline-block w-5 h-5 mr-2" /> 每日趋势
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -425,7 +418,7 @@ export default function TokenAnalysisPage() {
                   />
                   <YAxis 
                     stroke="#6b7280"
-                    label={{ value: '鏁伴噺/缇庡厓', angle: -90, position: 'insideLeft' }}
+                    label={{ value: '数量/美元', angle: -90, position: 'insideLeft' }}
                   />
                   <Tooltip 
                     contentStyle={{
@@ -438,7 +431,7 @@ export default function TokenAnalysisPage() {
                   <Line 
                     type="monotone" 
                     dataKey="request_count" 
-                    name="request_count"
+                    name="请求次数"
                     stroke={CHART_COLORS.blue} 
                     strokeWidth={2}
                     dot={{ r: 4 }}
@@ -446,7 +439,7 @@ export default function TokenAnalysisPage() {
                   <Line 
                     type="monotone" 
                     dataKey="total_cost" 
-                    name="total_cost"
+                    name="成本"
                     stroke={CHART_COLORS.green} 
                     strokeWidth={2}
                     dot={{ r: 4 }}
@@ -454,7 +447,7 @@ export default function TokenAnalysisPage() {
                   <Line 
                     type="monotone" 
                     dataKey="total_tokens" 
-                    name="total_tokens"
+                    name="token总量"
                     stroke={CHART_COLORS.purple} 
                     strokeWidth={2}
                     dot={{ r: 4 }}
@@ -491,26 +484,26 @@ export default function TokenAnalysisPage() {
       <Card>
         <CardHeader className="border-b">
           <CardTitle className="text-lg font-semibold text-foreground">
-            馃摑 浣跨敤璁板綍
-          </CardTitle>
+              <History className="inline-block w-5 h-5 mr-2" /> 使用记录
+            </CardTitle>
         </CardHeader>
         <CardContent>
           <table className="w-full">
             <thead className="bg-gray-50 dark:bg-gray-800">
               <tr>
-                <th className="px-6 py-3 text-left font-medium text-foreground">鏃堕棿</th>
-                <th className="px-6 py-3 text-left font-medium text-foreground">瀹炰緥</th>
-                <th className="px-6 py-3 text-left font-medium text-foreground">妯″瀷</th>
+                <th className="px-6 py-3 text-left font-medium text-foreground">时间</th>
+                <th className="px-6 py-3 text-left font-medium text-foreground">实例</th>
+                <th className="px-6 py-3 text-left font-medium text-foreground">模型</th>
                 <th className="px-6 py-3 text-right font-medium text-foreground">Prompt</th>
                 <th className="px-6 py-3 text-right font-medium text-foreground">Completion</th>
-                <th className="px-6 py-3 text-right font-medium text-foreground">鎬昏</th>
-                <th className="px-6 py-3 text-right font-medium text-foreground">鎴愭湰</th>
+                <th className="px-6 py-3 text-right font-medium text-foreground">总计</th>
+                <th className="px-6 py-3 text-right font-medium text-foreground">成本</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
               {usage.map((record) => (
                 <tr key={record.id} className="hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
-                  <td className="px-6 py-4 text-sm text-foreground">{record.timestamp}</td>
+                  <td className="px-6 py-4 text-sm text-foreground">{record.reported_at || record.timestamp}</td>
                   <td className="px-6 py-4 font-medium text-foreground">{record.instance_name}</td>
                   <td className="px-6 py-4">
                     <span className="text-sm">
@@ -521,14 +514,14 @@ export default function TokenAnalysisPage() {
                   <td className="px-6 py-4 text-right text-foreground">{record.completion_tokens.toLocaleString()}</td>
                   <td className="px-6 py-4 text-right font-medium text-foreground">{record.total_tokens.toLocaleString()}</td>
                   <td className="px-6 py-4 text-right text-success font-medium">
-                    ${record.cost.toFixed(3)}
+                    ¥{record.cost.toFixed(4)}
                   </td>
                 </tr>
               ))}
               {usage.length === 0 && (
                 <tr>
                   <td colSpan={7} className="px-6 py-8 text-center text-muted-foreground">
-                    鏆傛棤浣跨敤璁板綍
+                    暂无使用记录
                   </td>
                 </tr>
               )}
@@ -551,64 +544,6 @@ export default function TokenAnalysisPage() {
           </div>
         </div>
       </div>
-
-      {/* API Key Settings Modal (Placeholder) */}
-      {showSetting && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-foreground">璁剧疆API Key</h3>
-              <Button
-                variant="ghost"
-                onClick={() => setShowSetting(false)}
-                className="text-muted-foreground hover:text-foreground"
-              >
-                鉁?
-              </Button>
-            </div>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-foreground mb-2">
-                  OpenAI API Key
-                </label>
-                <input
-                  type="password"
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-foreground"
-                  placeholder="sk-..."
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-foreground mb-2">
-                  API Base URL (鍙€?
-                </label>
-                <input
-                  type="text"
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-foreground"
-                  placeholder="https://api.openai.com/v1"
-                />
-              </div>
-            </div>
-            <div className="mt-6 flex justify-end space-x-3">
-              <Button
-                variant="outline"
-                onClick={() => setShowSetting(false)}
-                className="text-foreground"
-              >
-                鍙栨秷
-              </Button>
-              <Button
-                variant="primary"
-                onClick={() => {
-                  console.log('淇濆瓨 API Key')
-                  setShowSetting(false)
-                }}
-              >
-                保存
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

@@ -32,13 +32,29 @@ const Layout: React.FC = () => {
       ],
     },
     {
+      key: 'nav.skillCenter',
+      icon: '🧩',
+      items: [
+        { key: 'nav.skills', path: '/skills', roles: ['admin', 'operator', 'dept_admin', 'employee', 'auditor'] },
+        { key: 'nav.skillStore', path: '/skills/store', roles: ['admin', 'operator', 'dept_admin', 'employee', 'auditor'] },
+        { key: 'nav.feedback', path: '/skills/feedback', roles: ['admin', 'operator', 'dept_admin', 'employee', 'auditor'] },
+        { key: 'nav.skillsSubmit', path: '/skills/submit', roles: ['admin', 'operator', 'dept_admin', 'employee', 'auditor'] },
+      ],
+    },
+    {
       key: 'nav.operations',
       icon: '⚙️',
       items: [
         { key: 'nav.setup', path: '/setup', roles: ['operator'] },
         { key: 'nav.config', path: '/config', roles: ['admin', 'operator'] },
-        { key: 'nav.skills', path: '/skills', roles: ['admin', 'operator', 'dept_admin', 'employee', 'auditor'] },
         { key: 'nav.token', path: '/token', roles: ['admin', 'operator', 'dept_admin', 'employee', 'auditor'] },
+      ],
+    },
+    {
+      key: 'nav.notifications',
+      icon: '🔔',
+      items: [
+        { key: 'nav.myNotifications', path: '/notifications', roles: ['admin', 'operator', 'dept_admin', 'employee', 'auditor'] },
       ],
     },
     {

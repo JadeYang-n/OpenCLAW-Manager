@@ -1,11 +1,12 @@
 import { useState, useEffect, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useLanguageStore } from '../../stores/languageStore'
 import { useAuthStore } from '../../stores/authStore'
-import { Sparkles, Check, Settings, Store, BarChart3 } from 'lucide-react'
+import { Sparkles, Check, Settings, Store, BarChart3, Plus } from 'lucide-react'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { PageContainer } from '../../components/ui/PageContainer'
-import { skillsAPI } from '@/services/api'
+import { skillsAPI, instancesAPI } from '@/services/api'
 
 // Simplified skill interface (only essential fields)
 interface BasicSkill {
@@ -30,6 +31,7 @@ interface SkillVersion {
 export default function SkillsPage() {
   const { t, language } = useLanguageStore()
   const { user, getToken } = useAuthStore()
+  const navigate = useNavigate()
   const [skills, setSkills] = useState<BasicSkill[]>([])
   const [loading, setLoading] = useState(true)
   const [showStore, setShowStore] = useState(false)
@@ -45,8 +47,21 @@ export default function SkillsPage() {
 
   const loadSkills = useCallback(async () => {
     try {
-      const skillsData = await skillsAPI.getSkills()
-      setSkills(skillsData as BasicSkill[])
+      const skillsData = await skillsAPI.getInstalledSkills()
+      // 后端返回 { data: [], success: true } 格式
+      const skills = skillsData.data || []
+      // 后端返回格式: [skill_id, name, description, version, installed_at, enabled, installed_version]
+      const mappedSkills = skills.map((skill: any) => ({
+        id: skill[0],  // skill_id
+        skill_id: skill[0],
+        name: skill[1],
+        description: skill[2],
+        version: skill[3],
+        installed_at: skill[4],
+        enabled: skill[5],
+        installed_version: skill[6]
+      }))
+      setSkills(mappedSkills as BasicSkill[])
     } catch (error) {
       console.error('Failed to load skills:', error)
       alert('错误:' + t('common.error') + ': ' + error)
@@ -78,26 +93,7 @@ export default function SkillsPage() {
     }
   }, [t, loadSkills])
 
-  const handleCreateSkill = async (e: React.FormEvent) => {
-    e.preventDefault()
-    const form = e.target as HTMLFormElement
-    const formData = new FormData(form)
-    
-    try {
-      await skillsAPI.createSkill({
-        name: formData.get('name') as string,
-        description: formData.get('description') as string,
-        content: formData.get('content') as string,
-        department_id: user?.department_id || '1',
-        created_by: user?.id || 'system'
-      })
-      alert('成功:' + t('common.success'))
-      await loadSkills()
-    } catch (error) {
-      console.error('Failed to create skill:', error)
-      alert('错误:' + t('common.error') + ': ' + error)
-    }
-  }
+
 
   const handleUpdateSkill = async (id: string, content: string) => {
     try {
@@ -130,6 +126,8 @@ export default function SkillsPage() {
   useEffect(() => {
     loadSkills()
   }, [loadSkills])
+
+
 
   useEffect(() => {
     loadMarketSkills()
@@ -182,9 +180,7 @@ export default function SkillsPage() {
 
   const handleToggleSkill = async (skillId: string, enabled: boolean) => {
     try {
-      await skillsAPI.updateSkill(skillId, {
-        content: '' // This would need a proper enable/disable API in backend
-      })
+      await skillsAPI.updateSkillStatus(skillId, { enabled })
       await loadSkills()
     } catch (error) {
       console.error('Failed to toggle skill:', error)
@@ -207,14 +203,14 @@ export default function SkillsPage() {
       
       if (operation === 'enable') {
         promises = skills.filter(s => !s.enabled).map(s => 
-          skillsAPI.updateSkill(s.skill_id, { content: '' })
+          skillsAPI.updateSkillStatus(s.id, { enabled: true })
         )
       } else if (operation === 'disable') {
         promises = skills.filter(s => s.enabled).map(s => 
-          skillsAPI.updateSkill(s.skill_id, { content: '' })
+          skillsAPI.updateSkillStatus(s.id, { enabled: false })
         )
       } else if (operation === 'delete') {
-        promises = skills.map(s => skillsAPI.deleteSkill(s.skill_id))
+        promises = skills.map(s => skillsAPI.deleteSkill(s.id))
       }
       
       if (promises.length > 0) {
@@ -271,6 +267,17 @@ export default function SkillsPage() {
 
   return (
     <PageContainer title="技能管理" description="管理和配置OpenCLAW的Skills">
+      {/* Action Header */}
+      <div className="flex justify-between items-center mb-6">
+        <h2 className="text-2xl font-bold">{isZh ? 'Skills 管理' : 'Skills Management'}</h2>
+        {canUpload && (
+          <Button onClick={() => navigate('/skills/submit')} variant="primary">
+            <Plus className="w-4 h-4 mr-2" />
+            {isZh ? '提交新 Skill' : 'Submit New Skill'}
+          </Button>
+        )}
+      </div>
+
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
         <Card variant="premium">
@@ -533,44 +540,7 @@ export default function SkillsPage() {
         </div>
       )}
 
-      {/* Create Skill Form */}
-      <Card className="mt-6">
-        <CardHeader>
-          <CardTitle>{isZh ? '创建新Skill' : 'Create New Skill'}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleCreateSkill} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium mb-1">{isZh ? '名称' : 'Name'}</label>
-              <input
-                name="name"
-                required
-                className="w-full p-2 border rounded"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-1">{isZh ? '描述' : 'Description'}</label>
-              <textarea
-                name="description"
-                className="w-full p-2 border rounded"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-1">{isZh ? '内容' : 'Content'}</label>
-              <textarea
-                name="content"
-                required
-                rows={5}
-                className="w-full p-2 border rounded"
-                placeholder={isZh ? '输入 Skill 内容...' : 'Enter Skill content...'}
-              />
-            </div>
-            <Button type="submit">
-              {isZh ? '创建 Skill' : 'Create Skill'}
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
+
     </PageContainer>
   )
 }

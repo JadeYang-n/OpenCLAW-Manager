@@ -13,14 +13,21 @@ import ConfigPage from './modules/config/ConfigPage'
 import MonitorPage from './modules/monitor/MonitorPage'
 import SecurityPage from './modules/security/SecurityPage'
 import SkillsPage from './modules/skills/SkillsPage'
+import SkillSubmitPage from './modules/skills/SkillSubmitPage'
+import SkillStorePage from './modules/skills/SkillStorePage'
+import SkillReviewPage from './modules/skills/SkillReviewPage'
+import SkillStatsPage from './modules/skills/SkillStatsPage'
+import FeedbackManagementPage from './modules/skills/FeedbackManagementPage'
 import SettingsPage from './modules/settings/SettingsPage'
 import InstancesPage from './modules/instances/InstancesPage'
+import GatewayConfigPage from './modules/instances/GatewayConfigPage'
 import AuditLogsPage from './modules/audit/AuditLogsPage'
 import DepartmentsPage from './modules/departments/DepartmentsPage'
 import ExportPage from './modules/export/ExportPage'
 import PortScannerPage from './modules/security/PortScannerPage'
 import InstanceDiscoveryPage from './modules/security/InstanceDiscoveryPage'
 import TokenBlacklistPage from './modules/security/TokenBlacklistPage'
+import NotificationsPage from './modules/notifications/NotificationsPage'
 import { Toaster } from './components/ui/toaster'
 
 function App() {
@@ -42,6 +49,7 @@ function App() {
       >
         <Route index element={<Navigate to="/instances" replace />} />
         <Route path="instances" element={<InstancesPage />} />
+        <Route path="instances/:id/gateway-config" element={<GatewayConfigPage />} />
         <Route path="departments" element={<DepartmentsPage />} />
         <Route path="dashboard" element={<DashboardPage />} />
         <Route path="token" element={<TokenAnalysisPage />} />
@@ -62,6 +70,12 @@ function App() {
         <Route path="security/discovery" element={<InstanceDiscoveryPage />} />
         <Route path="security/tokens/blacklist" element={<TokenBlacklistPage />} />
         <Route path="skills" element={<SkillsPage />} />
+        <Route path="skills/submit" element={<SkillSubmitPage />} />
+        <Route path="skills/store" element={<SkillStorePage />} />
+        <Route path="skills/review" element={<SkillReviewPage />} />
+        <Route path="skills/stats" element={<SkillStatsPage />} />
+        <Route path="skills/feedback" element={<FeedbackManagementPage />} />
+        <Route path="notifications" element={<NotificationsPage />} />
         <Route path="settings" element={<SettingsPage />} />
         <Route path="export" element={<ExportPage />} />
       </Route>
