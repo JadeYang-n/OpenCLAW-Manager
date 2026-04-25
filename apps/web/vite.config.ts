@@ -15,4 +15,10 @@ export default defineConfig({
     host: true,
     origin: 'http://localhost:5173',
   },
+  test: {
+    globals: true,
+    environment: 'jsdom',
+    setupFiles: './src/test/setup.ts',
+    include: ['src/**/*.test.{ts,tsx}'],
+  },
 })
