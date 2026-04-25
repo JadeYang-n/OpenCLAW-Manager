@@ -82,7 +82,7 @@ export async function updateDepartment(
   
   try {
     const response = await fetchAPI<{ success: boolean }>(
-      `/v1/departments/${departmentId}`,
+      `/departments/${departmentId}`,
       { 
         method: 'PUT',
         headers,
@@ -112,7 +112,7 @@ export async function deleteDepartment(
   
   try {
     const response = await fetchAPI<{ success: boolean }>(
-      `/v1/departments/${departmentId}`,
+      `/departments/${departmentId}`,
       { 
         method: 'DELETE',
         headers
@@ -140,7 +140,7 @@ export async function bindInstanceToDepartment(
   
   try {
     const response = await fetchAPI<{ success: boolean }>(
-      `/v1/instances/${req.instance_id}/departments`,
+      `/instances/${req.instance_id}/departments`,
       { 
         method: 'POST',
         headers,
@@ -170,7 +170,7 @@ export async function unbindInstanceFromDepartment(
   
   try {
     const response = await fetchAPI<{ success: boolean }>(
-      `/v1/instances/${instanceId}/departments/${departmentId}`,
+      `/instances/${instanceId}/departments/${departmentId}`,
       { 
         method: 'DELETE',
         headers
@@ -201,7 +201,7 @@ export async function getInstanceDepartments(
   
   try {
     const response = await fetchAPI<{ success: boolean; data: Department[] }>(
-      `/v1/instances/${instanceId}/departments`,
+      `/instances/${instanceId}/departments`,
       { headers }
     );
     
@@ -228,7 +228,7 @@ export async function getUserDepartments(
   
   try {
     const response = await fetchAPI<{ success: boolean; data: Department[] }>(
-      `/v1/users/${userId}/departments`,
+      `/users/${userId}/departments`,
       { headers }
     );
     
@@ -255,7 +255,7 @@ export async function bindUserToDepartment(
   
   try {
     const response = await fetchAPI<{ success: boolean }>(
-      `/v1/users/${req.user_id}/departments`,
+      `/users/${req.user_id}/departments`,
       { 
         method: 'POST',
         headers,
@@ -285,7 +285,7 @@ export async function removeUserFromDepartment(
   
   try {
     const response = await fetchAPI<{ success: boolean }>(
-      `/v1/users/${userId}/departments/${departmentId}`,
+      `/users/${userId}/departments/${departmentId}`,
       { 
         method: 'DELETE',
         headers

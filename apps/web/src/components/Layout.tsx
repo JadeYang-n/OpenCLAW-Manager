@@ -65,7 +65,7 @@ const Layout: React.FC = () => {
         { key: 'nav.audit', path: '/audit', roles: ['admin', 'operator', 'auditor'] },
         { key: 'nav.departments', path: '/departments', roles: ['admin', 'dept_admin'] },
         { key: 'nav.users', path: '/users', roles: ['admin', 'operator'] },
-        { key: 'nav.myUsage', path: '/my-usage', roles: ['employee'] },
+        { key: 'nav.myUsage', path: '/my-usage', roles: ['admin', 'operator', 'dept_admin', 'employee', 'auditor'] },
         { key: 'nav.security', path: '/security', roles: ['admin', 'operator'] },
         { key: 'nav.settings', path: '/settings', roles: ['admin', 'operator', 'dept_admin', 'employee', 'auditor'] },
       ],
