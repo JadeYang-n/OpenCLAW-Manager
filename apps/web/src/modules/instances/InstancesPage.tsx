@@ -61,10 +61,8 @@ interface CreateInstanceForm {
 }
 
 export default function InstancesPage() {
-  console.log('[InstancesPage] Component mounted/rendered')
   const { getToken } = useAuthStore()
   const [instances, setInstances] = useState<Instance[]>([])
-  console.log('[InstancesPage] Token from store:', getToken())
   const navigate = useNavigate()
   const [loading, setLoading] = useState(true)
   const [showCreateForm, setShowCreateForm] = useState(false)
@@ -153,11 +151,9 @@ export default function InstancesPage() {
   }, [])
 
   const loadInstances = useCallback(async () => {
-    console.log('[loadInstances] Called')
     try {
       const list = await instancesAPI.getInstances()
       const instancesData = Array.isArray(list) ? list : (list as { data?: Array<{}> })?.data
-      console.log('[loadInstances] Loaded instances:', instancesData)
       setInstances(instancesData || [])
     } catch (error) {
       console.error('加载实例失败:', error)
@@ -170,23 +166,18 @@ export default function InstancesPage() {
   const handleScan = useCallback(async () => {
     setScanning(true)
     try {
-      console.log('开始扫描...')
       const response = await instancesAPI.scanLocalInstances()
-      console.log('扫描完成，响应:', response)
-      
+
       // 从响应中提取 data 数组
       const instances = response.data || []
-      console.log('扫描到的实例:', instances)
       
       if (instances.length > 0) {
         // 优先使用 token 字段（后端返回），其次兼容 admin_token
         const autoToken = instances[0].token || instances[0].admin_token
         if (autoToken) {
           setAutoGatewayToken(autoToken)
-          console.log('自动读取到 Gateway Token，将在添加时使用')
         } else {
           setAutoGatewayToken('')
-          console.log('未从配置文件读取到 Gateway Token，将提示用户输入')
         }
       }
       
@@ -204,10 +195,7 @@ export default function InstancesPage() {
   const handleDiscoverGateways = useCallback(async () => {
     setDiscovering(true)
     try {
-      console.log('正在扫描局域网 Gateway...')
       const response = await instancesAPI.discoverGateways()
-      
-      console.log('发现 Gateway 响应:', response)
       
       if (response.success) {
         const gateways = response.data || []
@@ -295,9 +283,7 @@ export default function InstancesPage() {
     if (!pairingRequest?.pairing_id) return
     
     try {
-      console.log('检查配对状态:', pairingRequest.pairing_id)
       const response = await instancesAPI.getPairingStatus(pairingRequest.pairing_id)
-      console.log('配对状态响应:', response)
       
       if (response.success && response.data) {
         const data = response.data
@@ -309,8 +295,6 @@ export default function InstancesPage() {
         
         // 如果配对成功，自动创建实例
         if (data.status === 'approved' && data.device_token) {
-          console.log('配对成功，设备Token:', data.device_token)
-          
           // 停止轮询
           if (pollingInterval) {
             clearInterval(pollingInterval)
@@ -410,12 +394,9 @@ export default function InstancesPage() {
       // 如果没有自动 token，才提示用户手动输入
       adminToken = prompt(`为端口 ${port} 输入管理 Token:`)
       if (!adminToken) return
-    } else {
-      console.log('使用自动读取的 Gateway Token')
     }
-    
+
     try {
-      console.log(`正在连接到 http://127.0.0.1:${port}...`)
       await instancesAPI.addLocalInstance({ port, admin_token: adminToken })
       loadInstances()
       toast.success(`✅ 实例添加成功！`)
@@ -433,7 +414,6 @@ export default function InstancesPage() {
   }, [autoGatewayToken, loadInstances])
 
   useEffect(() => {
-    console.log('[InstancesPage] useEffect running - loading data')
     loadInstances()
     loadDepartments()
     loadConfigs()

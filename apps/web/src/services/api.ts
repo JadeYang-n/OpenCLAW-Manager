@@ -9,11 +9,10 @@ export async function fetchAPI<T = unknown>(endpoint: string, options: RequestIn
   try {
     // Get token from auth store
     const token = useAuthStore.getState().getToken()
-    console.log('[API] Request to:', endpoint, 'Token present:', !!token)
-    
+
     // 确保 endpoint 以 / 开头
     const normalizedEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
-    
+
     const response = await fetch(`${API_BASE_URL}${normalizedEndpoint}`, {
       ...options,
       headers: {
@@ -23,14 +22,8 @@ export async function fetchAPI<T = unknown>(endpoint: string, options: RequestIn
       },
     });
 
-    console.log('[API] Response status:', response.status, 'for:', endpoint)
-
     // Handle 401 Unauthorized
     if (response.status === 401) {
-      console.log('[API] 401 Unauthorized for:', endpoint, 'Timestamp:', Date.now())
-      console.log('[API] Token present:', !!token)
-      console.log('[API] Going to login in 3 seconds...')
-      // 延迟跳转，让用户能看清日志
       setTimeout(() => {
         useAuthStore.getState().logout()
         window.location.href = '/login'
@@ -144,6 +137,24 @@ export const skillsAPI = {
   },
 
   // 审核相关
+  getPendingReviewList: () => {
+    return fetchAPI('/skill-stores/review/pending');
+  },
+  approveSkill: (skillId: string, reason: string) => {
+    return fetchAPI(`/skill-stores/${skillId}/review/approve`, {
+      method: 'POST',
+      body: JSON.stringify({ reason, review_type: 'manual' }),
+    });
+  },
+  rejectSkill: (skillId: string, reason: string) => {
+    return fetchAPI(`/skill-stores/${skillId}/review/reject`, {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    });
+  },
+  getReviewHistory: (skillId: string) => {
+    return fetchAPI(`/skill-stores/${skillId}/review/history`);
+  },
   getReviewPendingList: () => {
     return fetchAPI('/skill-reviews');
   },
@@ -162,16 +173,16 @@ export const skillsAPI = {
 
 // Deployment API
 export const deployAPI = {
-  detectEnvironment: (mode: 'windows' | 'wsl2' | 'docker') => {
+  detectEnvironment: (mode: string) => {
     return fetchAPI('/deploy/detect', {
       method: 'POST',
       body: JSON.stringify({ mode }),
     });
   },
-  startDeployment: (mode: 'windows' | 'wsl2' | 'docker', config: { install_path?: string }) => {
+  startDeployment: (mode: string, config: { install_path: string; port: number; api_key?: string }) => {
     return fetchAPI('/deploy/start', {
       method: 'POST',
-      body: JSON.stringify({ mode, config }),
+      body: JSON.stringify({ mode, ...config }),
     });
   },
   getDeploymentStatus: (jobId: string) => {
@@ -187,9 +198,10 @@ export const deployAPI = {
       method: 'POST',
     });
   },
-  uninstallDeployment: () => {
+  uninstallDeployment: (mode: string) => {
     return fetchAPI('/deploy/uninstall', {
       method: 'POST',
+      body: JSON.stringify({ mode }),
     });
   },
 };

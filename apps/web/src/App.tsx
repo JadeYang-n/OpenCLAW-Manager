@@ -56,7 +56,7 @@ function App() {
         <Route path="my-usage" element={<MyUsagePage />} />
         <Route path="audit" element={<AuditLogsPage />} />
         <Route path="users" element={
-          <ProtectedRoute requiredRoles={['admin']}>
+          <ProtectedRoute requiredRoles={['admin', 'operator']}>
             <UsersPage />
           </ProtectedRoute>
         } />

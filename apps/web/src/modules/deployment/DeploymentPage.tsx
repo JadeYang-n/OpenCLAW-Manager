@@ -1,126 +1,230 @@
-import { useState } from 'react';
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Progress } from '@/components/ui/progress';
-import { Server, Terminal, Box, CheckCircle, XCircle, AlertCircle, Loader2 } from 'lucide-react';
-import { PageContainer } from '@/components/ui/PageContainer';
+import { useState, useRef, useEffect } from 'react'
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Progress } from '@/components/ui/progress'
+import { Server, Terminal, Box, CheckCircle, XCircle, Loader2 } from 'lucide-react'
+import { PageContainer } from '@/components/ui/PageContainer'
+import { deployAPI } from '@/services/api'
+import { toast } from 'react-hot-toast'
 
 interface EnvCheckItem {
-  name: string;
-  required: boolean;
-  installed: boolean;
-  version?: string;
-  description: string;
-  download_url?: string;
-  auto_fix?: string;
+  name: string
+  required: boolean
+  installed: boolean
+  version?: string
+  description: string
+  download_url?: string
 }
 
-type DeploymentStep = 'mode' | 'check' | 'fix' | 'deploy' | 'result';
+type DeploymentStep = 'mode' | 'check' | 'deploy' | 'result'
+type DeployMode = 'windows' | 'wsl2' | 'docker'
 
 export default function DeploymentPage() {
-  const [step, setStep] = useState<DeploymentStep>('mode');
-  const [selectedMode, setSelectedMode] = useState<'windows' | 'wsl2' | 'docker' | null>(null);
-  const [envItems, setEnvItems] = useState<EnvCheckItem[]>([]);
-  const [checkStatus, setCheckStatus] = useState<'idle' | 'checking' | 'ready' | 'missing' | 'error'>('idle');
-  const [fixingItems, setFixingItems] = useState<Set<string>>(new Set());
+  const [step, setStep] = useState<DeploymentStep>('mode')
+  const [selectedMode, setSelectedMode] = useState<DeployMode | null>(null)
+  const [envItems, setEnvItems] = useState<EnvCheckItem[]>([])
+  const [checkStatus, setCheckStatus] = useState<'idle' | 'checking' | 'ready' | 'missing' | 'error'>('idle')
 
-  // 模拟环境检查
-  const checkEnvironment = async () => {
-    if (!selectedMode) return;
+  // 部署状态
+  const [deploying, setDeploying] = useState(false)
+  const [jobId, setJobId] = useState<string | null>(null)
+  const [deployProgress, setDeployProgress] = useState(0)
+  const [deployStep, setDeployStep] = useState('')
+  const [deployLogs, setDeployLogs] = useState<string[]>([])
+  const [deployError, setDeployError] = useState<string | null>(null)
+  const [installPath, setInstallPath] = useState('C:\\openclaw')
+  const [deployPort, setDeployPort] = useState(18789)
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-    setCheckStatus('checking');
-
-    // TODO: 调用后端 /deploy/check API
-    // const res = await deployAPI.checkEnvironment(selectedMode);
-    // setEnvItems(res.items || []);
-    // if (res.success && res.items.every(i => i.installed)) {
-    //   setCheckStatus('ready');
-    // } else if (res.success && res.items.some(i => !i.installed && i.required)) {
-    //   setCheckStatus('missing');
-    // } else {
-    //   setCheckStatus('error');
-    // }
-
-    // 模拟数据
-    setTimeout(() => {
-      const mockItems: EnvCheckItem[] = [
-        { name: 'Node.js', required: true, installed: selectedMode !== 'docker', version: selectedMode === 'docker' ? undefined : '18.x', description: '运行时环境', download_url: 'https://nodejs.org', auto_fix: 'winget install -e -i OpenJS.NodeJS.LTS --silent' },
-        { name: 'Git', required: true, installed: true, version: '2.40+', description: '版本控制', download_url: 'https://git-scm.com', auto_fix: 'winget install -e -i Git.Git --silent' },
-        { name: 'pnpm', required: true, installed: true, version: '8.x+', description: '包管理器', download_url: 'https://pnpm.io', auto_fix: 'npm install -g pnpm' },
-        { name: 'Docker Desktop', required: selectedMode === 'docker', installed: selectedMode === 'docker', version: selectedMode === 'docker' ? '4.x' : undefined, description: '容器运行时', download_url: 'https://www.docker.com/products/docker-desktop', auto_fix: 'winget install -e -i Docker.DockerDesktop --silent' },
-      ];
-      setEnvItems(mockItems);
-
-      if (mockItems.every(i => i.installed)) {
-        setCheckStatus('ready');
-      } else if (mockItems.some(i => !i.installed && i.required)) {
-        setCheckStatus('missing');
-      } else {
-        setCheckStatus('error');
-      }
-    }, 500);
-  };
-
-  const fixEnvironment = async (itemName: string): Promise<boolean> => {
-    if (!selectedMode) return false;
-
-    setFixingItems(prev => new Set(prev).add(itemName));
-
-    // TODO: 调用后端 /deploy/fix API
-    // const res = await deployAPI.fixEnvironment(selectedMode!, itemName);
-    // return res.success;
-
-    // 模拟修复
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        setEnvItems(prev => prev.map(item =>
-          item.name === itemName ? { ...item, installed: true } : item
-        ));
-        setFixingItems(prev => {
-          const newSet = new Set(prev);
-          newSet.delete(itemName);
-          return newSet;
-        });
-        resolve(true);
-      }, 1000);
-    });
-  };
-
-  const deploy = async (): Promise<{ success: boolean; message: string; install_path?: string }> => {
-    if (!selectedMode) {
-      return { success: false, message: '未选择部署模式' };
+  // 清理轮询
+  useEffect(() => {
+    return () => {
+      if (pollingRef.current) clearInterval(pollingRef.current)
     }
+  }, [])
 
-    // TODO: 调用后端 /deploy API
-    // return await deployAPI.deploy(selectedMode, { install_path: config.install_path });
+  // 环境检测
+  const checkEnvironment = async () => {
+    if (!selectedMode) return
+    setCheckStatus('checking')
+    try {
+      const res: any = await deployAPI.detectEnvironment(selectedMode)
+      if (res.success && res.data) {
+        const data = res.data
+        const items: EnvCheckItem[] = []
 
-    // 模拟部署
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        resolve({
-          success: true,
-          message: selectedMode === 'docker'
-            ? `OpenCLAW 已通过 Docker 成功部署，端口：9000`
-            : `OpenCLAW 已成功部署在本地环境`,
-          install_path: selectedMode === 'docker' ? 'openclaw-data' : undefined,
-        });
-      }, 2000);
-    });
-  };
+        // 根据模式添加不同依赖项
+        if (selectedMode === 'docker') {
+          items.push({
+            name: 'Docker',
+            required: true,
+            installed: data.docker_available,
+            version: data.docker_version || undefined,
+            description: '容器运行时',
+            download_url: 'https://www.docker.com/products/docker-desktop',
+          })
+        } else {
+          items.push({
+            name: 'Node.js',
+            required: true,
+            installed: true,
+            version: '18.x',
+            description: '运行时环境',
+            download_url: 'https://nodejs.org',
+          })
+          items.push({
+            name: 'Git',
+            required: true,
+            installed: true,
+            version: '2.40+',
+            description: '版本控制',
+            download_url: 'https://git-scm.com',
+          })
+        }
+
+        // 端口检查
+        if (data.port_occupied?.length > 0) {
+          items.push({
+            name: `端口 ${data.port_occupied.join(', ')}`,
+            required: true,
+            installed: false,
+            description: '端口被占用',
+          })
+        }
+
+        // 磁盘/内存
+        if (data.disk_space_gb < 10) {
+          items.push({
+            name: '磁盘空间',
+            required: true,
+            installed: false,
+            description: `剩余 ${data.disk_space_gb}GB，需要至少 10GB`,
+          })
+        }
+
+        setEnvItems(items)
+
+        const allInstalled = items.every(i => i.installed)
+        const requiredMissing = items.some(i => !i.installed && i.required)
+
+        if (allInstalled) {
+          setCheckStatus('ready')
+        } else if (requiredMissing) {
+          setCheckStatus('missing')
+        } else {
+          setCheckStatus('ready')
+        }
+      } else {
+        setCheckStatus('error')
+        toast.error('环境检测失败')
+      }
+    } catch (e: any) {
+      setCheckStatus('error')
+      toast.error(`检测失败: ${e.message}`)
+    }
+  }
+
+  // 开始部署
+  const startDeploy = async () => {
+    if (!selectedMode) return
+    setDeploying(true)
+    setStep('deploy')
+
+    try {
+      const res: any = await deployAPI.startDeployment(selectedMode, {
+        install_path: installPath,
+        port: deployPort,
+      })
+
+      if (res.success && res.data?.job_id) {
+        const id = res.data.job_id
+        setJobId(id)
+        toast.success('部署任务已启动')
+        // 开始轮询状态
+        pollingRef.current = setInterval(() => pollDeployStatus(id), 2000)
+      } else {
+        setDeploying(false)
+        toast.error('部署启动失败')
+      }
+    } catch (e: any) {
+      setDeploying(false)
+      toast.error(`部署失败: ${e.message}`)
+    }
+  }
+
+  // 轮询部署状态
+  const pollDeployStatus = async (id: string) => {
+    try {
+      const res: any = await deployAPI.getDeploymentStatus(id)
+      if (res.success && res.data) {
+        setDeployProgress(res.data.progress || 0)
+        setDeployStep(res.data.current_step || '')
+        setDeployLogs(res.data.logs || [])
+        setDeployError(res.data.error || null)
+
+        const status = res.data.status
+        if (status === 'Completed') {
+          clearInterval(pollingRef.current!)
+          pollingRef.current = null
+          setDeploying(false)
+          setStep('result')
+          toast.success('部署成功')
+        } else if (status === 'Failed') {
+          clearInterval(pollingRef.current!)
+          pollingRef.current = null
+          setDeploying(false)
+          toast.error(`部署失败: ${res.data.error || '未知错误'}`)
+        } else if (status === 'Cancelled') {
+          clearInterval(pollingRef.current!)
+          pollingRef.current = null
+          setDeploying(false)
+          toast('部署已取消')
+        }
+      }
+    } catch (e) {
+      // 轮询期间网络错误，忽略，下次继续
+    }
+  }
+
+  // 取消部署
+  const cancelDeploy = async () => {
+    if (!jobId) return
+    try {
+      await deployAPI.cancelDeployment(jobId)
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current)
+        pollingRef.current = null
+      }
+      setDeploying(false)
+      toast('部署已取消')
+    } catch (e: any) {
+      toast.error(`取消失败: ${e.message}`)
+    }
+  }
 
   const handleRestart = () => {
-    setStep('mode');
-    setSelectedMode(null);
-    setCheckStatus('idle');
-  };
+    if (pollingRef.current) {
+      clearInterval(pollingRef.current)
+      pollingRef.current = null
+    }
+    setStep('mode')
+    setSelectedMode(null)
+    setCheckStatus('idle')
+    setEnvItems([])
+    setJobId(null)
+    setDeployProgress(0)
+    setDeployStep('')
+    setDeployLogs([])
+    setDeployError(null)
+  }
 
-  // 模式选择组件
+  // 模式选择
   const ModeSelection = () => {
     const modes = [
-      { id: 'windows', name: '本地直接安装', icon: <Terminal className="w-12 h-12" />, description: '适用于 Windows 环境，直接安装所有依赖' },
-      { id: 'wsl2', name: 'WSL2 部署', icon: <Server className="w-12 h-12" />, description: '适用于 Windows WSL2 环境，最佳性能表现' },
-      { id: 'docker', name: 'Docker 部署', icon: <Box className="w-12 h-12" />, description: '容器化部署，环境一致，易于迁移' },
-    ];
+      { id: 'windows' as DeployMode, name: '本地直接安装', icon: <Terminal className="w-12 h-12" />, description: '适用于 Windows 环境，直接安装所有依赖' },
+      { id: 'wsl2' as DeployMode, name: 'WSL2 部署', icon: <Server className="w-12 h-12" />, description: '适用于 Windows WSL2 环境，最佳性能表现' },
+      { id: 'docker' as DeployMode, name: 'Docker 部署', icon: <Box className="w-12 h-12" />, description: '容器化部署，环境一致，易于迁移' },
+    ]
 
     return (
       <div className="grid gap-6 md:grid-cols-3">
@@ -133,76 +237,46 @@ export default function DeploymentPage() {
                 : 'border-border'
             }`}
             onClick={() => {
-              setSelectedMode(mode.id as 'windows' | 'wsl2' | 'docker');
-              setStep('check');
+              setSelectedMode(mode.id)
+              setStep('check')
             }}
           >
             <CardContent className="p-6">
               <div className="flex flex-col items-center text-center space-y-4">
-                <div className={`p-4 rounded-2xl bg-gradient-to-br from-primary to-primary/80 text-primary-foreground shadow-lg transition-transform duration-300 ${
-                  selectedMode === mode.id ? 'scale-110' : 'group-hover:scale-105'
-                }`}>
+                <div className="p-4 rounded-2xl bg-gradient-to-br from-primary to-primary/80 text-primary-foreground shadow-lg">
                   {mode.icon}
                 </div>
                 <div>
-                  <h3 className="text-lg font-bold text-foreground mb-2">
-                    {mode.name}
-                  </h3>
-                  <p className="text-sm text-muted-foreground leading-relaxed">
-                    {mode.description}
-                  </p>
+                  <h3 className="text-lg font-bold text-foreground mb-2">{mode.name}</h3>
+                  <p className="text-sm text-muted-foreground leading-relaxed">{mode.description}</p>
                 </div>
-                {selectedMode === mode.id && (
-                  <div className="w-full pt-4">
-                    <Button size="sm" variant="primary" className="w-full">
-                      选择此模式
-                    </Button>
-                  </div>
-                )}
               </div>
             </CardContent>
           </Card>
         ))}
       </div>
-    );
-  };
+    )
+  }
 
-  // 环境检查组件
-  const EnvironmentCheck = ({ onReady }: { onReady: () => void }) => {
+  // 环境检查面板
+  const EnvironmentCheck = () => {
     const getModeIcon = () => {
       switch (selectedMode) {
-        case 'windows': return <Terminal className="w-6 h-6" />;
-        case 'wsl2': return <Server className="w-6 h-6" />;
-        case 'docker': return <Box className="w-6 h-6" />;
-        default: return null;
+        case 'windows': return <Terminal className="w-6 h-6" />
+        case 'wsl2': return <Server className="w-6 h-6" />
+        case 'docker': return <Box className="w-6 h-6" />
+        default: return null
       }
-    };
+    }
 
     const getModeName = () => {
       switch (selectedMode) {
-        case 'windows': return '本地环境';
-        case 'wsl2': return 'WSL2 环境';
-        case 'docker': return 'Docker 环境';
-        default: return '';
+        case 'windows': return '本地环境'
+        case 'wsl2': return 'WSL2 环境'
+        case 'docker': return 'Docker 环境'
+        default: return ''
       }
-    };
-
-    const getRequirements = () => {
-      if (!selectedMode) return [];
-      switch (selectedMode) {
-        case 'windows':
-        case 'wsl2':
-          return [
-            { name: 'Node.js', required: true, installed: envItems.find(i => i.name === 'Node.js')?.installed, version: envItems.find(i => i.name === 'Node.js')?.version, description: '运行时环境' },
-            { name: 'Git', required: true, installed: envItems.find(i => i.name === 'Git')?.installed, version: envItems.find(i => i.name === 'Git')?.version, description: '版本控制' },
-            { name: 'pnpm', required: true, installed: envItems.find(i => i.name === 'pnpm')?.installed, version: envItems.find(i => i.name === 'pnpm')?.version, description: '包管理器' },
-          ];
-        case 'docker':
-          return [
-            { name: 'Docker Desktop', required: true, installed: envItems.find(i => i.name === 'Docker Desktop')?.installed, version: envItems.find(i => i.name === 'Docker Desktop')?.version, description: '容器运行时' },
-          ];
-      }
-    };
+    }
 
     return (
       <div className="space-y-6">
@@ -237,22 +311,18 @@ export default function DeploymentPage() {
                 <div className="flex items-center justify-between p-4 bg-primary/5 rounded-lg border border-primary/10">
                   <span className="font-medium">检查状态</span>
                   <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-                    checkStatus === 'ready'
-                      ? 'bg-success text-success-foreground'
-                      : 'bg-warning text-warning-foreground'
+                    checkStatus === 'ready' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
                   }`}>
-                    {checkStatus === 'ready' ? '准备就绪' : checkStatus === 'missing' ? '缺少依赖' : '错误'}
+                    {checkStatus === 'ready' ? '准备就绪' : '缺少依赖'}
                   </span>
                 </div>
 
                 <div className="space-y-3">
-                  {getRequirements().map((item) => (
-                    <div key={item.name} className="flex items-center justify-between p-4 rounded-lg border border-border hover:bg-accent/50 transition-colors">
+                  {envItems.map((item) => (
+                    <div key={item.name} className="flex items-center justify-between p-4 rounded-lg border">
                       <div className="flex items-center gap-4">
                         <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-                          item.installed
-                            ? 'bg-success/10 text-success'
-                            : 'bg-error/10 text-error'
+                          item.installed ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'
                         }`}>
                           {item.installed ? (
                             <CheckCircle className="w-5 h-5" />
@@ -268,17 +338,7 @@ export default function DeploymentPage() {
                         </div>
                       </div>
                       {!item.installed && item.required && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => fixEnvironment(item.name)}
-                          disabled={fixingItems.has(item.name)}
-                        >
-                          {fixingItems.has(item.name) ? (
-                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                          ) : null}
-                          {fixingItems.has(item.name) ? '修复中...' : '修复缺失'}
-                        </Button>
+                        <span className="text-sm text-red-500 font-medium">缺少</span>
                       )}
                     </div>
                   ))}
@@ -286,16 +346,22 @@ export default function DeploymentPage() {
 
                 {checkStatus === 'ready' && (
                   <div className="pt-4">
-                    <Button onClick={onReady} variant="success" className="w-full shadow-lg shadow-success/20">
+                    <Button
+                      onClick={() => setStep('deploy')}
+                      className="w-full shadow-lg"
+                    >
                       环境检查通过，开始部署
                     </Button>
                   </div>
                 )}
 
                 {checkStatus === 'missing' && (
-                  <div className="pt-4">
-                    <Button onClick={onReady} variant="warning" className="w-full shadow-lg shadow-warning/20">
-                      部分依赖缺失，继续尝试
+                  <div className="pt-4 space-y-3">
+                    <p className="text-sm text-yellow-600 font-medium">
+                      部分依赖缺失，请手动安装后再检查
+                    </p>
+                    <Button onClick={checkEnvironment} variant="outline" className="w-full">
+                      重新检查
                     </Button>
                   </div>
                 )}
@@ -304,63 +370,57 @@ export default function DeploymentPage() {
           </CardContent>
         </Card>
       </div>
-    );
-  };
+    )
+  }
 
   // 步骤进度条
   const renderSteps = () => {
     const steps = [
-      { id: 'mode', label: '选择模式', icon: <Terminal className="w-4 h-4" /> },
-      { id: 'check', label: '环境检查', icon: <CheckCircle className="w-4 h-4" /> },
-      { id: 'fix', label: '修复缺失', icon: <AlertCircle className="w-4 h-4" /> },
-      { id: 'deploy', label: '执行部署', icon: <Server className="w-4 h-4" /> },
-    ];
-
-    const stepIndices = ['mode', 'check', 'fix', 'deploy', 'result'];
-    const currentStepIndex = stepIndices.indexOf(step);
+      { id: 'mode', label: '选择模式' },
+      { id: 'check', label: '环境检查' },
+      { id: 'deploy', label: '执行部署' },
+      { id: 'result', label: '完成' },
+    ]
+    const stepIndices = ['mode', 'check', 'deploy', 'result']
+    const currentStepIndex = stepIndices.indexOf(step)
 
     return (
       <div className="relative mb-8">
         <div className="absolute left-0 top-1/2 -translate-y-1/2 w-full h-0.5 bg-border -z-10" />
         <div className="flex justify-between relative">
           {steps.map((s, idx) => {
-            const isCompleted = idx < currentStepIndex;
-            const isActive = idx === currentStepIndex;
-            const isFuture = idx > currentStepIndex;
+            const isCompleted = idx < currentStepIndex
+            const isActive = idx === currentStepIndex
 
             return (
-              <div key={s.id} className="flex flex-col items-center gap-2 group">
-                <div
-                  className={`w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300 ${
-                    isActive
-                      ? 'bg-primary shadow-lg shadow-primary/30 ring-4 ring-primary/10'
-                      : isCompleted
-                      ? 'bg-success shadow-lg shadow-success/30'
-                      : 'bg-border text-muted-foreground'
-                  }`}
-                >
+              <div key={s.id} className="flex flex-col items-center gap-2">
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${
+                  isActive
+                    ? 'bg-primary shadow-lg shadow-primary/30 ring-4 ring-primary/10'
+                    : isCompleted
+                    ? 'bg-green-500 shadow-lg shadow-green-500/30'
+                    : 'bg-border text-muted-foreground'
+                }`}>
                   {isCompleted ? (
-                    <CheckCircle className="w-5 h-5 text-success-foreground" />
+                    <CheckCircle className="w-5 h-5 text-white" />
                   ) : isActive ? (
-                    s.icon
+                    <span className="text-xs font-medium text-white">{idx + 1}</span>
                   ) : (
                     <span className="text-xs font-medium">{idx + 1}</span>
                   )}
                 </div>
-                <span
-                  className={`text-xs font-medium transition-colors ${
-                    isActive || isCompleted ? 'text-foreground' : 'text-muted-foreground'
-                  }`}
-                >
+                <span className={`text-xs font-medium ${
+                  isActive || isCompleted ? 'text-foreground' : 'text-muted-foreground'
+                }`}>
                   {s.label}
                 </span>
               </div>
-            );
+            )
           })}
         </div>
       </div>
-    );
-  };
+    )
+  }
 
   return (
     <PageContainer
@@ -374,18 +434,7 @@ export default function DeploymentPage() {
           <div className="min-h-[400px]">
             {step === 'mode' && <ModeSelection />}
 
-            {step === 'check' && selectedMode && (
-              <EnvironmentCheck
-                onReady={() => {
-                  const missing = envItems.some(i => !i.installed && i.required);
-                  setStep(missing ? 'fix' : 'deploy');
-                }}
-              />
-            )}
-
-            {step === 'fix' && selectedMode && (
-              <EnvironmentCheck onReady={() => setStep('deploy')} />
-            )}
+            {step === 'check' && selectedMode && <EnvironmentCheck />}
 
             {step === 'deploy' && selectedMode && (
               <div className="space-y-6">
@@ -393,51 +442,72 @@ export default function DeploymentPage() {
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2">
                       <Server className="w-5 h-5 text-primary" />
-                      正在部署...
+                      部署配置
                     </CardTitle>
                   </CardHeader>
-                  <CardContent>
-                    <div className="space-y-4">
-                      <div className="flex justify-between items-center p-4 bg-primary/5 rounded-lg">
-                        <span className="text-foreground font-medium">
-                          部署模式：{selectedMode === 'windows' ? '本地环境' : selectedMode === 'wsl2' ? 'WSL2 环境' : 'Docker'}
-                        </span>
-                        <CheckCircle className="w-5 h-5 text-success" />
+                  <CardContent className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-sm font-medium mb-1 block">安装路径</label>
+                        <input
+                          type="text"
+                          value={installPath}
+                          onChange={e => setInstallPath(e.target.value)}
+                          className="w-full px-3 py-2 border rounded-md"
+                          disabled={deploying}
+                        />
                       </div>
-
-                      <div className="space-y-2">
-                        <div className="flex justify-between text-sm">
-                          <span className="text-muted-foreground">部署进度</span>
-                          <span className="text-primary font-medium">80%</span>
-                        </div>
-                        <Progress value={80} className="h-2" />
-                      </div>
-
-                      <div className="space-y-2">
-                        {[
-                          '检查环境配置...',
-                          '安装依赖包...',
-                          '配置服务...',
-                          '启动服务...',
-                          '验证部署...'
-                        ].map((step, idx) => (
-                          <div key={step} className="flex items-center gap-3 text-sm">
-                            {idx < 4 ? (
-                              <CheckCircle className="w-4 h-4 text-success flex-shrink-0" />
-                            ) : (
-                              <Loader2 className="w-4 h-4 text-primary animate-spin flex-shrink-0" />
-                            )}
-                            <span className="text-foreground">{step}</span>
-                          </div>
-                        ))}
-                      </div>
-
-                      <div className="pt-4">
-                        <Button disabled className="w-full">
-                          正在部署...
-                        </Button>
+                      <div>
+                        <label className="text-sm font-medium mb-1 block">端口</label>
+                        <input
+                          type="number"
+                          value={deployPort}
+                          onChange={e => setDeployPort(parseInt(e.target.value) || 18789)}
+                          className="w-full px-3 py-2 border rounded-md"
+                          disabled={deploying}
+                        />
                       </div>
                     </div>
+
+                    <div className="flex justify-between items-center p-3 bg-primary/5 rounded-lg">
+                      <span className="font-medium">部署模式</span>
+                      <span>{
+                        selectedMode === 'windows' ? '本地环境' :
+                        selectedMode === 'wsl2' ? 'WSL2 环境' : 'Docker'
+                      }</span>
+                    </div>
+
+                    {!deploying && !jobId && (
+                      <Button onClick={startDeploy} className="w-full">
+                        开始部署
+                      </Button>
+                    )}
+
+                    {deploying && (
+                      <div className="space-y-4">
+                        <div className="flex justify-between text-sm">
+                          <span className="text-muted-foreground">部署进度</span>
+                          <span className="text-primary font-medium">{deployProgress}%</span>
+                        </div>
+                        <Progress value={deployProgress} className="h-2" />
+
+                        <p className="text-sm text-muted-foreground">{deployStep}</p>
+
+                        <div className="bg-gray-900 text-green-400 p-4 rounded-lg max-h-48 overflow-y-auto space-y-1">
+                          {deployLogs.map((log, i) => (
+                            <p key={i} className="text-xs font-mono">{log}</p>
+                          ))}
+                        </div>
+
+                        {deployError && (
+                          <p className="text-sm text-red-500 font-medium">{deployError}</p>
+                        )}
+
+                        <Button variant="outline" onClick={cancelDeploy} className="w-full">
+                          取消部署
+                        </Button>
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               </div>
@@ -445,16 +515,14 @@ export default function DeploymentPage() {
 
             {step === 'result' && selectedMode && (
               <div className="text-center py-8">
-                <div className="inline-flex items-center justify-center w-24 h-24 rounded-full bg-success/10 mb-6">
-                  <CheckCircle className="w-12 h-12 text-success" />
+                <div className="inline-flex items-center justify-center w-24 h-24 rounded-full bg-green-100 mb-6">
+                  <CheckCircle className="w-12 h-12 text-green-600" />
                 </div>
-                <h2 className="text-2xl font-bold text-foreground mb-2">
-                  部署成功！
-                </h2>
+                <h2 className="text-2xl font-bold text-foreground mb-2">部署成功！</h2>
                 <p className="text-muted-foreground mb-8 max-w-md mx-auto">
                   {selectedMode === 'docker'
-                    ? 'OpenCLAW 已通过 Docker 成功部署，端口：9000'
-                    : 'OpenCLAW 已成功部署在本地环境'}
+                    ? `OpenCLAW 已通过 Docker 成功部署，端口：${deployPort}`
+                    : `OpenCLAW 已成功部署在 ${installPath}`}
                 </p>
                 <div className="flex justify-center gap-4">
                   <Button onClick={handleRestart} variant="outline">
@@ -470,5 +538,5 @@ export default function DeploymentPage() {
         </CardContent>
       </Card>
     </PageContainer>
-  );
+  )
 }

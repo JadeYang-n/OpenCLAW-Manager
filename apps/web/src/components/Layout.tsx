@@ -39,6 +39,7 @@ const Layout: React.FC = () => {
         { key: 'nav.skillStore', path: '/skills/store', roles: ['admin', 'operator', 'dept_admin', 'employee', 'auditor'] },
         { key: 'nav.feedback', path: '/skills/feedback', roles: ['admin', 'operator', 'dept_admin', 'employee', 'auditor'] },
         { key: 'nav.skillsSubmit', path: '/skills/submit', roles: ['admin', 'operator', 'dept_admin', 'employee', 'auditor'] },
+        { key: 'nav.skillReview', path: '/skills/review', roles: ['admin', 'operator', 'dept_admin'] },
       ],
     },
     {

@@ -122,20 +122,6 @@ export default function LoginPage() {
               {loading ? '登录中...' : '登录'}
             </button>
           </form>
-
-          {/* 初始账号提示 */}
-          <div className="mt-6 p-4 bg-blue-50 rounded-md">
-            <p className="text-sm text-blue-800 font-medium mb-2">
-              📝 初始管理员账号
-            </p>
-            <div className="text-sm text-blue-700 space-y-1">
-              <p>用户名：<code className="bg-white px-2 py-1 rounded">admin</code></p>
-              <p>密码：<code className="bg-white px-2 py-1 rounded">admin123</code></p>
-            </div>
-            <p className="text-xs text-blue-600 mt-2">
-              ⚠️ 首次登录后请立即修改密码
-            </p>
-          </div>
         </div>
 
         {/* 底部信息 */}

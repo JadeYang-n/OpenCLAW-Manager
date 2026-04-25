@@ -3,22 +3,26 @@ import { toast } from 'react-hot-toast'
 import { useAuthStore } from '../../stores/authStore'
 import * as deptApi from '../departments/api'
 import type { Department } from '../departments/types'
+import { userAPI } from '../../services/api'
 
 interface User {
   id: string
   username: string
+  email: string
+  full_name: string
   role: 'admin' | 'operator' | 'dept_admin' | 'employee' | 'auditor'
   department_id?: string
-  departments?: Department[]  // 用户关联的部门
+  departments?: Department[]
   created_at: string
-  last_login_at?: string
+  last_login?: string
+  is_active: boolean
 }
 
 interface CreateUserForm {
   username: string
   password: string
   role: string
-  department_id?: string  // 主部门
+  department_id?: string
 }
 
 export default function UsersPage() {
@@ -47,20 +51,10 @@ export default function UsersPage() {
 
   const loadUsers = useCallback(async () => {
     try {
-      // TODO: 实现 list_users API
-      // const list = await invoke<User[]>('list_users')
-      // setUsers(list)
-      
-      // 暂时模拟数据
-      setUsers([
-        {
-          id: 'admin-001',
-          username: 'admin',
-          role: 'admin',
-          created_at: '2026-03-10 00:00:00',
-          last_login_at: '2026-03-10 22:00:00',
-        },
-      ])
+      const result = await userAPI.getUsers() as { success: boolean; data: User[] }
+      if (result.success && result.data) {
+        setUsers(result.data)
+      }
     } catch (err) {
       setError('加载用户失败：' + (err as Error).message)
     } finally {
@@ -76,31 +70,37 @@ export default function UsersPage() {
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault()
     setError('')
-    
+
     try {
-      // TODO: 实现 create_user API
-      // await invoke('create_user', { req: createForm })
-      
-      // 如果选择了部门，绑定用户到部门
-      if (createForm.department_id) {
-        try {
-          const token = getToken() || ''
-          // 模拟创建用户后获取用户 ID
-          const mockUserId = 'user-' + Date.now()
-          await deptApi.bindUserToDepartment(token, {
-            user_id: mockUserId,
-            department_id: createForm.department_id,
-            is_primary: true
-          })
-        } catch (error) {
-          console.error('绑定部门失败:', error)
+      const result = await userAPI.createUser({
+        username: createForm.username,
+        password: createForm.password,
+        email: `${createForm.username}@ocm.local`,
+        full_name: createForm.username,
+        role: createForm.role,
+        department_id: createForm.department_id || undefined,
+      }) as { success: boolean; data?: { id: string } }
+
+      if (result.success && result.data) {
+        // 如果选择了部门，绑定用户到部门
+        if (createForm.department_id) {
+          try {
+            const token = getToken() || ''
+            await deptApi.bindUserToDepartment(token, {
+              user_id: result.data.id,
+              department_id: createForm.department_id,
+              is_primary: true
+            })
+          } catch (error) {
+            console.error('绑定部门失败:', error)
+          }
         }
+
+        setCreateForm({ username: '', password: '', role: 'employee', department_id: '' })
+        setShowCreateForm(false)
+        loadUsers()
+        toast.success('用户创建成功')
       }
-      
-      setCreateForm({ username: '', password: '', role: 'employee', department_id: '' })
-      setShowCreateForm(false)
-      loadUsers()
-      toast.success('✅ 用户创建成功（模拟）')
     } catch (err) {
       setError('创建失败：' + (err as Error).message)
       toast.error('❌ 创建失败：' + (err as Error).message)
@@ -108,19 +108,17 @@ export default function UsersPage() {
   }
 
   async function handleDelete(id: string, username: string) {
-    // 不能删除自己
     if (id === currentUser?.id) {
-      toast.error('❌ 不能删除自己的账号')
+      toast.error('不能删除自己的账号')
       return
     }
-    
+
     if (!confirm(`确定要删除用户 "${username}" 吗？`)) return
-    
+
     try {
-      // TODO: 实现 delete_user API
-      // await invoke('delete_user', { userId: id })
+      await userAPI.deleteUser(id)
       loadUsers()
-      toast.success('✅ 用户删除成功（模拟）')
+      toast.success(`用户 "${username}" 已删除`)
     } catch (err) {
       setError('删除失败：' + (err as Error).message)
       toast.error('❌ 删除失败：' + (err as Error).message)
@@ -149,7 +147,6 @@ export default function UsersPage() {
     return colors[role] || 'bg-gray-100 text-gray-800'
   }
 
-  // 只有超级管理员能访问
   if (currentUser?.role !== 'admin') {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -270,7 +267,6 @@ export default function UsersPage() {
               <th className="px-6 py-3 text-left font-medium text-gray-700">用户名</th>
               <th className="px-6 py-3 text-left font-medium text-gray-700">角色</th>
               <th className="px-6 py-3 text-left font-medium text-gray-700">部门</th>
-              <th className="px-6 py-3 text-left font-medium text-gray-700">创建时间</th>
               <th className="px-6 py-3 text-left font-medium text-gray-700">最后登录</th>
               <th className="px-6 py-3 text-left font-medium text-gray-700">操作</th>
             </tr>
@@ -285,12 +281,9 @@ export default function UsersPage() {
                   </span>
                 </td>
                 <td className="px-6 py-4 text-gray-600">
-                  {user.departments && user.departments.length > 0
-                    ? user.departments.map(d => d.name).join(', ')
-                    : '-'}
+                  {departments.find(d => d.id === user.department_id)?.name || '-'}
                 </td>
-                <td className="px-6 py-4 text-gray-600">{user.created_at}</td>
-                <td className="px-6 py-4 text-gray-600">{user.last_login_at || '-'}</td>
+                <td className="px-6 py-4 text-gray-600">{user.last_login || '-'}</td>
                 <td className="px-6 py-4">
                   <button
                     onClick={() => handleDelete(user.id, user.username)}
@@ -304,19 +297,13 @@ export default function UsersPage() {
             ))}
             {users.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
+                <td colSpan={5} className="px-6 py-8 text-center text-gray-500">
                   暂无用户
                 </td>
               </tr>
             )}
           </tbody>
         </table>
-      </div>
-
-      <div className="mt-4 p-4 bg-blue-50 rounded-md">
-        <p className="text-sm text-blue-800">
-          💡 提示：用户管理功能需要后端 API 支持，当前为演示版本。
-        </p>
       </div>
     </div>
   )

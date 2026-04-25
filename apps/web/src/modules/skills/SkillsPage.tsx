@@ -48,18 +48,16 @@ export default function SkillsPage() {
   const loadSkills = useCallback(async () => {
     try {
       const skillsData = await skillsAPI.getInstalledSkills()
-      // 后端返回 { data: [], success: true } 格式
       const skills = skillsData.data || []
-      // 后端返回格式: [skill_id, name, description, version, installed_at, enabled, installed_version]
       const mappedSkills = skills.map((skill: any) => ({
-        id: skill[0],  // skill_id
-        skill_id: skill[0],
-        name: skill[1],
-        description: skill[2],
-        version: skill[3],
-        installed_at: skill[4],
-        enabled: skill[5],
-        installed_version: skill[6]
+        id: skill.skill_id,
+        skill_id: skill.skill_id,
+        name: skill.name,
+        description: skill.description,
+        version: skill.version,
+        installed_at: skill.installed_at,
+        enabled: skill.enabled,
+        installed_version: skill.installed_version
       }))
       setSkills(mappedSkills as BasicSkill[])
     } catch (error) {

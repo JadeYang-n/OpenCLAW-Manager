@@ -88,7 +88,8 @@ export default function TokenAnalysisPage() {
       
       // 调用后端API获取Token usage数据
       const token = localStorage.getItem('auth_token')
-      const response = await fetch('http://localhost:8080/api/v1/gateway/token/usage', {
+      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api/v1';
+      const response = await fetch(`${API_BASE_URL}/gateway/token/usage`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -187,8 +188,7 @@ export default function TokenAnalysisPage() {
 
   // Export data function
   const exportData = () => {
-    console.log('导出数据到CSV')
-    // TODO: 实现CSV导出功能
+    // 实现CSV导出功能
   }
 
   // Load data function

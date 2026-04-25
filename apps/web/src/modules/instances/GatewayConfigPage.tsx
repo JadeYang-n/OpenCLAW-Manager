@@ -70,9 +70,7 @@ export default function GatewayConfigPage() {
   const fetchInstances = async () => {
     try {
       const data = await instancesAPI.getInstances()
-      console.log('[GatewayConfigPage] fetchInstances data:', data)
       if (data.success) {
-        console.log('[GatewayConfigPage] instances:', data.data)
         setInstances(data.data || [])
       }
     } catch (error) {

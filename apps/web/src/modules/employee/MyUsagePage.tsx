@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react'
-import { useAuthStore } from '../../stores/authStore'
+import { useAuthStore } from '@/stores/authStore'
+import { tokenUsageAPI } from '@/services/api'
+import { toast } from 'react-hot-toast'
 
 interface UsageRecord {
   id: string
@@ -20,7 +22,7 @@ interface MonthlyStats {
 }
 
 export default function MyUsagePage() {
-  useAuthStore()
+  const { user } = useAuthStore()
   const [loading, setLoading] = useState(true)
   const [records, setRecords] = useState<UsageRecord[]>([])
   const [monthlyStats, setMonthlyStats] = useState<MonthlyStats[]>([])
@@ -32,52 +34,47 @@ export default function MyUsagePage() {
   async function loadData() {
     try {
       setLoading(true)
-      
-      // TODO: 调用后端 API 获取当前用户的用量
-      // const token = getToken() || ''
-      // const data = await invoke<UsageRecord[]>('list_my_usage', { token })
-      
-      // 暂时模拟数据
-      const mockRecords: UsageRecord[] = [
+
+      // 获取用量统计（employee 角色后端自动过滤为当前用户）
+      const statsRes: any = await tokenUsageAPI.getStats()
+      let statsData = statsRes?.data || {}
+
+      // 获取用量记录
+      const recordsRes: any = await tokenUsageAPI.getTokenUsage()
+      const usageRecords: any[] = Array.isArray(recordsRes?.data) ? recordsRes.data : []
+
+      // 转换为前端格式
+      const formattedRecords: UsageRecord[] = usageRecords.slice(0, 20).map((r: any) => ({
+        id: r.id,
+        timestamp: r.reported_at || new Date().toISOString(),
+        model: r.model || 'unknown',
+        prompt_tokens: r.prompt_tokens || 0,
+        completion_tokens: r.completion_tokens || 0,
+        total_tokens: r.total_tokens || 0,
+        purpose: `实例: ${r.instance_name || r.instance_id || '未知'}`,
+      }))
+
+      setRecords(formattedRecords)
+
+      // 月度统计
+      const currentMonth = new Date().toISOString().slice(0, 7)
+      const totalTokens = statsData.total_tokens || 0
+      const requestCount = statsData.request_count || statsData.count || 0
+      const quota = 50000
+
+      const monthly: MonthlyStats[] = [
         {
-          id: '1',
-          timestamp: '2026-03-10 14:30:00',
-          model: 'gpt-3.5-turbo',
-          prompt_tokens: 500,
-          completion_tokens: 300,
-          total_tokens: 800,
-          purpose: '周报生成',
-        },
-        {
-          id: '2',
-          timestamp: '2026-03-10 11:20:00',
-          model: 'gpt-3.5-turbo',
-          prompt_tokens: 200,
-          completion_tokens: 150,
-          total_tokens: 350,
-          purpose: '邮件草稿',
-        },
-        {
-          id: '3',
-          timestamp: '2026-03-09 16:45:00',
-          model: 'gpt-4',
-          prompt_tokens: 1200,
-          completion_tokens: 800,
-          total_tokens: 2000,
-          purpose: '代码审查',
+          month: currentMonth,
+          total_tokens: totalTokens,
+          request_count: requestCount,
+          quota: quota,
+          quota_used_percent: Math.round((totalTokens / quota) * 100),
         },
       ]
-      setRecords(mockRecords)
-      
-      // 模拟月度统计
-      const mockMonthly: MonthlyStats[] = [
-        { month: '2026-03', total_tokens: 15000, request_count: 45, quota: 50000, quota_used_percent: 30 },
-        { month: '2026-02', total_tokens: 32000, request_count: 89, quota: 50000, quota_used_percent: 64 },
-        { month: '2026-01', total_tokens: 28000, request_count: 76, quota: 50000, quota_used_percent: 56 },
-      ]
-      setMonthlyStats(mockMonthly)
-    } catch (error) {
+      setMonthlyStats(monthly)
+    } catch (error: any) {
       console.error('加载数据失败:', error)
+      toast.error(`加载用量数据失败: ${error.message}`)
     } finally {
       setLoading(false)
     }
@@ -98,72 +95,34 @@ export default function MyUsagePage() {
       <div className="mb-6">
         <h1 className="text-2xl font-bold">我的使用</h1>
         <p className="text-gray-600 mt-1">
-          查看您个人的 Token 使用情况和配额
+          查看您的 Token 使用情况（{user?.username || '当前用户'}）
         </p>
       </div>
 
       {/* 配额概览 */}
       <div className="bg-white p-6 rounded-lg border shadow-sm mb-6">
-        <h3 className="text-lg font-semibold mb-4">📊 本月配额使用情况</h3>
-        {monthlyStats.length > 0 && (
+        <h3 className="text-lg font-semibold mb-4">📊 用量统计</h3>
+        {monthlyStats.length > 0 ? (
           <div>
             <div className="flex justify-between items-end mb-2">
               <div>
-                <p className="text-sm text-gray-600">当前月份</p>
+                <p className="text-sm text-gray-600">当前统计周期</p>
                 <p className="text-2xl font-bold">{monthlyStats[0].month}</p>
               </div>
               <div className="text-right">
                 <p className="text-sm text-gray-600">已使用</p>
                 <p className="text-2xl font-bold text-blue-600">
-                  {monthlyStats[0].total_tokens.toLocaleString()} / {monthlyStats[0].quota.toLocaleString()}
+                  {monthlyStats[0].total_tokens.toLocaleString()} tokens
                 </p>
               </div>
             </div>
-            <div className="w-full bg-gray-200 rounded-full h-4 mb-2">
-              <div
-                className={`h-4 rounded-full ${
-                  monthlyStats[0].quota_used_percent > 80
-                    ? 'bg-red-600'
-                    : monthlyStats[0].quota_used_percent > 50
-                    ? 'bg-yellow-600'
-                    : 'bg-green-600'
-                }`}
-                style={{ width: `${monthlyStats[0].quota_used_percent}%` }}
-              ></div>
-            </div>
             <div className="flex justify-between text-sm">
               <span className="text-gray-600">{monthlyStats[0].request_count} 次请求</span>
-              <span className={`font-medium ${
-                monthlyStats[0].quota_used_percent > 80
-                  ? 'text-red-600'
-                  : monthlyStats[0].quota_used_percent > 50
-                  ? 'text-yellow-600'
-                  : 'text-green-600'
-              }`}>
-                {monthlyStats[0].quota_used_percent}% 已使用
-              </span>
             </div>
           </div>
+        ) : (
+          <p className="text-gray-500">暂无用量数据</p>
         )}
-      </div>
-
-      {/* 历史月份 */}
-      <div className="bg-white p-6 rounded-lg border shadow-sm mb-6">
-        <h3 className="text-lg font-semibold mb-4">📅 历史月份</h3>
-        <div className="space-y-3">
-          {monthlyStats.slice(1).map((month) => (
-            <div key={month.month} className="flex items-center justify-between py-2 border-b last:border-0">
-              <div className="font-medium">{month.month}</div>
-              <div className="flex items-center gap-8">
-                <div className="text-sm text-gray-600">{month.request_count} 次请求</div>
-                <div className="text-right">
-                  <div className="text-sm font-medium">{month.total_tokens.toLocaleString()} tokens</div>
-                  <div className="text-xs text-gray-500">{month.quota_used_percent}% 配额使用率</div>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
       </div>
 
       {/* 使用记录 */}
@@ -176,7 +135,7 @@ export default function MyUsagePage() {
             <tr>
               <th className="px-6 py-3 text-left font-medium text-gray-700">时间</th>
               <th className="px-6 py-3 text-left font-medium text-gray-700">模型</th>
-              <th className="px-6 py-3 text-left font-medium text-gray-700">用途</th>
+              <th className="px-6 py-3 text-left font-medium text-gray-700">来源</th>
               <th className="px-6 py-3 text-right font-medium text-gray-700">Prompt</th>
               <th className="px-6 py-3 text-right font-medium text-gray-700">Completion</th>
               <th className="px-6 py-3 text-right font-medium text-gray-700">总计</th>
@@ -206,12 +165,6 @@ export default function MyUsagePage() {
             )}
           </tbody>
         </table>
-      </div>
-
-      <div className="mt-4 p-4 bg-green-50 rounded-md">
-        <p className="text-sm text-green-800">
-          ✅ 普通员工只能查看自己的使用记录，无法查看他人数据。如需提升配额，请联系部门管理员。
-        </p>
       </div>
     </div>
   )
