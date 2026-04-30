@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'react-hot-toast'
 import { useAuthStore } from '../../stores/authStore'
+import { useLanguageStore } from '../../stores/languageStore'
 import * as deptApi from '../departments/api'
 import type { Department } from '../departments/types'
 import { api } from '../../lib/api'
@@ -45,6 +46,8 @@ interface DiscoveredInstance {
   port: number
   endpoint: string
   status: string
+  available?: boolean
+  version?: string
   token?: string
   admin_token?: string
 }
@@ -62,6 +65,8 @@ interface CreateInstanceForm {
 
 export default function InstancesPage() {
   const { getToken } = useAuthStore()
+  const { t, language } = useLanguageStore()
+  const isZh = language === 'zh'
   const [instances, setInstances] = useState<Instance[]>([])
   const navigate = useNavigate()
   const [loading, setLoading] = useState(true)
@@ -220,14 +225,11 @@ export default function InstancesPage() {
     
     setPairingLoading(true)
     try {
-      console.log('发起远程 Gateway 配对:', remoteGatewayIP, remoteGatewayPort)
       const response = await instancesAPI.addRemoteInstance({
         gateway_ip: remoteGatewayIP,
         gateway_port: remoteGatewayPort,
       })
-      
-      console.log('配对响应:', response)
-      
+
       if (response.success) {
         const data = response.data || {}
         setPairingRequest({
@@ -358,7 +360,6 @@ export default function InstancesPage() {
       
       // 5分钟（300秒）后自动超时
       const timeoutId = setTimeout(() => {
-        console.log('配对超时')
         setPairingStatus(prev => ({
           ...prev,
           status: 'timeout',
@@ -386,21 +387,33 @@ export default function InstancesPage() {
     }
   }, [pollingInterval])
 
-  const handleAddLocalInstance = useCallback(async (port: number) => {
-    // 直接使用自动读取的 token，不再弹出确认框
-    let adminToken = autoGatewayToken
-    
+  const handleAddLocalInstance = useCallback(async (inst: DiscoveredInstance) => {
+    // 重新扫描获取最新 token（Gateway 重启后 token 会变化）
+    try {
+      const refreshRes = await instancesAPI.scanLocalInstances()
+      const refreshed = (refreshRes.data || []) as DiscoveredInstance[]
+      const match = refreshed.find(r => r.port === inst.port)
+      if (match) {
+        inst = { ...inst, token: match.token, admin_token: match.admin_token }
+      }
+    } catch (e) {
+      console.warn('刷新 token 失败，使用原有 token')
+    }
+
+    // 优先使用实例自带的 token，其次使用全局 autoGatewayToken
+    let adminToken = inst.token || inst.admin_token || autoGatewayToken
+
     if (!adminToken) {
-      // 如果没有自动 token，才提示用户手动输入
-      adminToken = prompt(`为端口 ${port} 输入管理 Token:`)
+      // 如果没有 token，提示用户手动输入
+      adminToken = prompt(`为端口 ${inst.port} 输入管理 Token:`)
       if (!adminToken) return
     }
 
     try {
-      await instancesAPI.addLocalInstance({ port, admin_token: adminToken })
+      await instancesAPI.addLocalInstance({ port: inst.port, admin_token: adminToken })
       loadInstances()
       toast.success(`✅ 实例添加成功！`)
-      
+
       // 成功后保持 autoGatewayToken，方便下次添加
       // setAutoGatewayToken('')
     } catch (error) {
@@ -408,6 +421,9 @@ export default function InstancesPage() {
       let friendlyMsg = errorMsg
       if (errorMsg.includes("localhost:5173") || errorMsg.includes("8080")) {
         friendlyMsg = "无法连接到服务器,请确保后端服务正在运行"
+      }
+      if (errorMsg.includes("400") || errorMsg.includes("token") || errorMsg.includes("Token") || errorMsg.includes("认证") || errorMsg.includes("auth")) {
+        friendlyMsg = "Token 无效或已过期，请重启 Gateway 后重新扫描"
       }
       toast.error(`❌ 添加失败: ${friendlyMsg}`)
     }
@@ -469,6 +485,16 @@ export default function InstancesPage() {
     }
   }
 
+  const refreshInstanceDepartments = useCallback(async (instanceId: string) => {
+    try {
+      const token = getToken() || ''
+      const depts = await deptApi.getInstanceDepartments(token, instanceId)
+      setInstanceDepartments(depts)
+    } catch (error) {
+      console.error('刷新部门失败:', error)
+    }
+  }, [getToken])
+
   async function bindDepartment(deptId: string) {
     if (!currentInstanceId) return
     try {
@@ -477,7 +503,8 @@ export default function InstancesPage() {
         instance_id: currentInstanceId,
         department_id: deptId
       })
-      await openDeptDialog(currentInstanceId)
+      await refreshInstanceDepartments(currentInstanceId)
+      await loadInstances()
       alert('✅ 部门绑定成功！')
     } catch (error) {
       alert('❌ 绑定失败：' + error)
@@ -489,7 +516,8 @@ export default function InstancesPage() {
     try {
       const token = getToken() || ''
       await deptApi.unbindInstanceFromDepartment(token, currentInstanceId, deptId)
-      await openDeptDialog(currentInstanceId)
+      await refreshInstanceDepartments(currentInstanceId)
+      await loadInstances()
       alert('✅ 部门解绑成功！')
     } catch (error) {
       alert('❌ 解绑失败：' + error)
@@ -585,7 +613,7 @@ export default function InstancesPage() {
       <Card className="shadow-elegant">
         <CardContent className="p-12 text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-muted-foreground">加载实例数据...</p>
+          <p className="text-muted-foreground">{t('instances.loading')}</p>
         </CardContent>
       </Card>
     )
@@ -596,8 +624,8 @@ export default function InstancesPage() {
       {/* 顶部标题区域 */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-foreground">实例管理</h1>
-          <p className="text-muted-foreground mt-1">监控和管理所有OpenCLAW实例</p>
+          <h1 className="text-3xl font-bold text-foreground">{t('instances.title')}</h1>
+          <p className="text-muted-foreground mt-1">{t('instances.subtitle')}</p>
         </div>
         
         <div className="flex items-center gap-3">
@@ -609,7 +637,7 @@ export default function InstancesPage() {
               className="shadow-elegant hover:shadow-glow transition-all"
             >
               <RefreshCw className="w-4 h-4 mr-2" />
-              {batchOperating ? '操作中...' : '批量重启 (' + selectedInstances.length + ')'}
+              {batchOperating ? t('instances.operating') : t('instances.batchRestart') + ' (' + selectedInstances.length + ')'}
             </Button>
           )}
           <Button 
@@ -619,7 +647,7 @@ export default function InstancesPage() {
             className="shadow-elegant hover:shadow-glow transition-all"
           >
             <Scan className="w-4 h-4 mr-2" />
-            {scanning ? '扫描中...' : '扫描本地实例'}
+            {scanning ? t('instances.scanning') : t('instances.scanLocal')}
           </Button>
           <Button 
             variant="success"
@@ -628,7 +656,7 @@ export default function InstancesPage() {
             className="shadow-elegant hover:shadow-glow transition-all"
           >
             <Scan className="w-4 h-4 mr-2" />
-            {discovering ? '扫描中...' : '发现局域网 Gateway'}
+            {discovering ? t('instances.scanning') : t('instances.discoverGateway')}
           </Button>
           <Button 
             variant="primary" 
@@ -636,7 +664,7 @@ export default function InstancesPage() {
             className="shadow-elegant hover:shadow-glow transition-all"
           >
             <Plus className="w-4 h-4 mr-2" />
-            添加远程Gateway
+            {t('instances.addRemote')}
           </Button>
         </div>
       </div>
@@ -763,7 +791,7 @@ export default function InstancesPage() {
                   setDiscovering(false)
                 }}
               >
-                关闭列表
+                {t('instances.closeList')}
               </Button>
             </div>
           </CardContent>
@@ -776,14 +804,14 @@ export default function InstancesPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Server className="w-5 h-5 text-blue-600" />
-              创建新实例
+              {t('instances.createNew')}
             </CardTitle>
           </CardHeader>
           <CardContent className="p-6">
             <form onSubmit={handleCreate} className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
-                  <label className="text-sm font-medium text-foreground">实例名称</label>
+                  <label className="text-sm font-medium text-foreground">{t('instances.name')}</label>
                   <Input
                     type="text"
                     value={createForm.name}
@@ -794,7 +822,7 @@ export default function InstancesPage() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-sm font-medium text-foreground">主机 IP</label>
+                  <label className="text-sm font-medium text-foreground">{t('instances.hostIP')}</label>
                   <Input
                     type="text"
                     value={createForm.host_ip}
@@ -805,7 +833,7 @@ export default function InstancesPage() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-sm font-medium text-foreground">管理端口</label>
+                  <label className="text-sm font-medium text-foreground">{t('instances.adminPort')}</label>
                   <Input
                     type="number"
                     value={createForm.admin_port}
@@ -817,7 +845,7 @@ export default function InstancesPage() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-sm font-medium text-foreground">管理 Token</label>
+                  <label className="text-sm font-medium text-foreground">{t('instances.adminToken')}</label>
                   <Input
                     type="password"
                     value={createForm.admin_token}
@@ -828,7 +856,7 @@ export default function InstancesPage() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-sm font-medium text-foreground">所属部门</label>
+                  <label className="text-sm font-medium text-foreground">{t('instances.department')}</label>
                   <Select
                     value={createForm.department_id}
                     onChange={(e) => setCreateForm({ ...createForm, department_id: e.target.value })}
@@ -841,13 +869,13 @@ export default function InstancesPage() {
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <label className="text-sm font-medium text-foreground">关联配置</label>
+                  <label className="text-sm font-medium text-foreground">{t('instances.config')}</label>
                   <Select
                     value={createForm.config_id}
                     onChange={(e) => setCreateForm({ ...createForm, config_id: e.target.value })}
                     className="w-full"
                   >
-                    <option value="">不关联配置</option>
+                    <option value="">{t('instances.noConfig')}</option>
                     {configs.map((config) => (
                       <option key={config.id} value={config.id}>{config.name}</option>
                     ))}
@@ -856,7 +884,7 @@ export default function InstancesPage() {
               </div>
 
               <div className="space-y-3 pt-4 border-t">
-                <label className="text-sm font-medium text-foreground">安装 Skills（可选）</label>
+                <label className="text-sm font-medium text-foreground">{t('instances.skills')}</label>
                 <div className="border rounded-lg p-4 bg-muted/30">
                   {skills.filter(s => s.installed).length === 0 ? (
                     <p className="text-sm text-muted-foreground text-center py-4">
@@ -1085,7 +1113,7 @@ export default function InstancesPage() {
           <CardHeader className="bg-blue-600 text-white">
             <CardTitle className="flex items-center gap-2">
               <Scan className="w-5 h-5" />
-              扫描发现 {discoveredInstances.length} 个本地实例
+              {t('instances.scannedFound', { count: discoveredInstances.length })}
             </CardTitle>
           </CardHeader>
           <CardContent className="p-0">
@@ -1094,46 +1122,46 @@ export default function InstancesPage() {
                 <thead className="bg-muted/50">
                   <tr>
                     <th className="px-6 py-4 text-left font-semibold text-foreground">端口</th>
-                    <th className="px-6 py-4 text-left font-semibold text-foreground">端点</th>
-                    <th className="px-6 py-4 text-left font-semibold text-foreground">Token状态</th>
-                    <th className="px-6 py-4 text-left font-semibold text-foreground">状态</th>
-                    <th className="px-6 py-4 text-right font-semibold text-foreground">操作</th>
+                    <th className="px-6 py-4 text-left font-semibold text-foreground">{t('instances.tableEndpoint')}</th>
+                    <th className="px-6 py-4 text-left font-semibold text-foreground">{t('instances.tableTokenStatus')}</th>
+                    <th className="px-6 py-4 text-left font-semibold text-foreground">{t('instances.tableStatus')}</th>
+                    <th className="px-6 py-4 text-right font-semibold text-foreground">{t('instances.tableActions')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
                   {discoveredInstances.map((inst, index) => (
-                    <tr key={index} className="hover:bg-muted/30 transition-colors">
+                    <tr key={`discovered-${inst.port}-${inst.endpoint || index}`} className="hover:bg-muted/30 transition-colors">
                       <td className="px-6 py-4">
                         <span className="font-mono text-sm text-foreground">
-                          {inst.manager_endpoint?.split(':').pop() || inst.port || '未知'}
+                          {inst.manager_endpoint?.split(':').pop() || inst.port || t('instances.unknown')}
                         </span>
                       </td>
                       <td className="px-6 py-4 text-foreground">{inst.manager_endpoint}</td>
                       <td className="px-6 py-4">
-                        {inst.admin_token ? (
+                        {inst.token || inst.admin_token ? (
                           <Badge variant="success">
                             <CheckCircle className="w-3 h-3 mr-1" />
-                            自动读取
+                            {t('instances.autoRead')}
                           </Badge>
                         ) : (
                           <Badge variant="warning">
                             <AlertTriangle className="w-3 h-3 mr-1" />
-                            需要输入
+                            {t('instances.needInput')}
                           </Badge>
                         )}
                       </td>
                       <td className="px-6 py-4">
-                        <StatusBadge status={inst.gateway_online ? 'success' : 'error'} />
+                        <StatusBadge status={inst.status === 'online' ? 'success' : 'error'} />
                       </td>
                       <td className="px-6 py-4 text-right">
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => handleAddLocalInstance(inst.port)}
+                          onClick={() => handleAddLocalInstance(inst)}
                           className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
                         >
                           <Plus className="w-3 h-3 mr-1" />
-                          一键添加
+                          {t('instances.oneClickAdd')}
                         </Button>
                       </td>
                     </tr>
@@ -1147,7 +1175,7 @@ export default function InstancesPage() {
                 onClick={() => setDiscoveredInstances([])}
                 className="text-muted-foreground hover:text-foreground"
               >
-                收起结果
+                {t('instances.collapseResults')}
               </Button>
             </div>
           </CardContent>
@@ -1159,11 +1187,11 @@ export default function InstancesPage() {
         <CardHeader className="flex flex-row justify-between items-center bg-muted/30">
           <CardTitle className="flex items-center gap-2 text-lg">
             <Server className="w-5 h-5 text-blue-600" />
-            所有实例
+            {t('instances.allInstances')}
           </CardTitle>
           <Button variant="outline" onClick={loadInstances} disabled={loading}>
             <RefreshCw className={'w-4 h-4 mr-2 ' + (loading ? 'animate-spin' : '')} />
-            刷新
+            {t('instances.refresh')}
           </Button>
         </CardHeader>
         <CardContent className="p-0">
@@ -1183,12 +1211,12 @@ export default function InstancesPage() {
                       checked={instances.length > 0 && selectedInstances.length === instances.length}
                     />
                   </th>
-                  <th className="px-6 py-4 text-left font-semibold text-foreground">名称</th>
-                  <th className="px-6 py-4 text-left font-semibold text-foreground">端点</th>
-                  <th className="px-6 py-4 text-left font-semibold text-foreground">部门</th>
-                  <th className="px-6 py-4 text-left font-semibold text-foreground">状态</th>
-                  <th className="px-6 py-4 text-left font-semibold text-foreground">版本</th>
-                  <th className="px-6 py-4 text-right font-semibold text-foreground">操作</th>
+                  <th className="px-6 py-4 text-left font-semibold text-foreground">{t('instances.tableName')}</th>
+                  <th className="px-6 py-4 text-left font-semibold text-foreground">{t('instances.tableEndpoint')}</th>
+                  <th className="px-6 py-4 text-left font-semibold text-foreground">{t('instances.tableDepartment')}</th>
+                  <th className="px-6 py-4 text-left font-semibold text-foreground">{t('instances.tableStatus')}</th>
+                  <th className="px-6 py-4 text-left font-semibold text-foreground">{t('instances.tableVersion')}</th>
+                  <th className="px-6 py-4 text-right font-semibold text-foreground">{t('instances.tableActions')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
@@ -1204,7 +1232,7 @@ export default function InstancesPage() {
                       <div className="flex flex-col">
                         <span className="font-medium text-foreground">{instance.name}</span>
                         {instance.enabled === false && (
-                          <span className="text-xs text-muted-foreground">已禁用</span>
+                          <span className="text-xs text-muted-foreground">{t('instances.disabled')}</span>
                         )}
                       </div>
                     </td>
@@ -1219,7 +1247,7 @@ export default function InstancesPage() {
                       >
                         {instance.departments && instance.departments.length > 0
                           ? instance.departments.map(d => d.name).join(', ')
-                          : '未绑定'}
+                          : t('instances.noDepartment')}
                       </Button>
                     </td>
                     <td className="px-6 py-4">
@@ -1236,7 +1264,7 @@ export default function InstancesPage() {
                           onClick={() => navigate(`/instances/${instance.id}/gateway-config`)}
                           className="text-xs"
                         >
-                          配置 Gateway
+                          {t('instances.configureGateway')}
                         </Button>
                         <Button
                           variant="default"
@@ -1244,7 +1272,7 @@ export default function InstancesPage() {
                           onClick={() => handleToggleEnable(instance.id, instance.enabled || false)}
                           className="text-xs"
                         >
-                          {instance.enabled ? '禁用' : '启用'}
+                          {instance.enabled ? t('instances.disable') : t('instances.enable')}
                         </Button>
                         <Button
                           variant="destructive"
@@ -1252,7 +1280,7 @@ export default function InstancesPage() {
                           onClick={() => handleDelete(instance.id)}
                           className="text-xs"
                         >
-                          删除
+                          {t('instances.delete')}
                         </Button>
                       </div>
                     </td>
@@ -1263,7 +1291,7 @@ export default function InstancesPage() {
                     <td colSpan={7} className="px-6 py-12 text-center">
                       <div className="flex flex-col items-center justify-center text-muted-foreground">
                         <Server className="w-16 h-16 mb-4 opacity-20" />
-                        <p className="text-lg font-medium">暂无实例</p>
+                        <p className="text-lg font-medium">{t('instances.noInstances')}</p>
                         <p className="text-sm mt-2">点击右上角按钮添加第一个实例</p>
                       </div>
                     </td>

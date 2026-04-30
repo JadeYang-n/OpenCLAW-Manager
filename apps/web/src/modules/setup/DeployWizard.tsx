@@ -1,6 +1,8 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useLocation } from 'react-router-dom'
 import { DeployModeSelector, DeployMode } from './DeployModeSelector'
-import { EnvCheckMatrix, EnvCheckReport } from './EnvCheckMatrix'
+import { deployAPI } from '../../services/api'
+import { EnvCheckMatrix, EnvCheckReport, EnvCheckItem } from './EnvCheckMatrix'
 import { Card, CardHeader, CardBody, CardFooter } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
@@ -16,12 +18,24 @@ enum DeployStep {
 }
 
 export function DeployWizard() {
-  const [currentStep, setCurrentStep] = useState<DeployStep>(DeployStep.SELECT_MODE)
-  const [selectedMode, setSelectedMode] = useState<DeployMode['id'] | null>(null)
+  const location = useLocation()
+  const preSelectedMode = location.state?.mode as DeployMode['id'] | undefined
+
+  const [currentStep, setCurrentStep] = useState<DeployStep>(
+    preSelectedMode ? DeployStep.CHECKING : DeployStep.SELECT_MODE
+  )
+  const [selectedMode, setSelectedMode] = useState<DeployMode['id'] | null>(preSelectedMode || null)
   const [envReport, setEnvReport] = useState<EnvCheckReport | null>(null)
   const [isChecking, setIsChecking] = useState(false)
   const [fixingItems, setFixingItems] = useState<Set<string>>(new Set())
   const [deployProgress, setDeployProgress] = useState(0)
+
+  // Auto-start env check if mode was pre-selected from SetupPage
+  useEffect(() => {
+    if (preSelectedMode && !envReport && !isChecking) {
+      handleEnvCheck()
+    }
+  }, [])
 
   const handleSelectMode = (mode: DeployMode['id']) => {
     setSelectedMode(mode)
@@ -30,53 +44,47 @@ export function DeployWizard() {
 
   const handleEnvCheck = async () => {
     if (!selectedMode) return
-    
     setIsChecking(true)
-    
     try {
-      // TODO: 调用后端命令 check_environment(selectedMode)
-      // 模拟检测延迟
-      await new Promise(resolve => setTimeout(resolve, 2000))
-      
-      // Mock 数据 - 实际应从后端获取
-      const mockReport: EnvCheckReport = {
-        mode: selectedMode,
-        items: [
-          {
-            name: 'Node.js',
-            required: true,
-            installed: true,
-            version: 'v20.11.0',
-            description: 'Node.js 20 或更高版本'
-          },
-          {
-            name: 'Git',
-            required: true,
-            installed: false,
-            version: undefined,
-            description: 'Git 版本控制工具',
-            downloadUrl: 'https://git-scm.com/',
-            fixCommand: 'winget install Git.Git'
-          },
-          {
-            name: 'pnpm',
-            required: true,
-            installed: true,
-            version: '8.15.0',
-            description: 'pnpm 包管理器'
-          }
-        ],
-        allPassed: false,
-        passedCount: 2,
-        totalCount: 3
-      }
-      
-      setEnvReport(mockReport)
-      
-      if (mockReport.allPassed) {
-        setCurrentStep(DeployStep.READY)
-      } else {
-        setCurrentStep(DeployStep.FIXING)
+      const res: any = await deployAPI.detectEnvironment(selectedMode)
+      if (res.success && res.data) {
+        const d = res.data
+        const items: EnvCheckItem[] = []
+        if (d.node_version !== undefined && d.node_version !== null) {
+          items.push({ name: 'Node.js', required: true, installed: true, version: d.node_version, description: 'Node.js 20 或更高版本', fixCommand: 'winget install OpenJS.NodeJS' })
+        } else {
+          items.push({ name: 'Node.js', required: true, installed: false, description: 'Node.js 20 或更高版本', fixCommand: 'winget install OpenJS.NodeJS' })
+        }
+        if (d.git_version !== undefined && d.git_version !== null) {
+          items.push({ name: 'Git', required: true, installed: true, version: d.git_version, description: 'Git 版本控制工具', downloadUrl: 'https://git-scm.com/', fixCommand: 'winget install Git.Git' })
+        } else {
+          items.push({ name: 'Git', required: true, installed: false, description: 'Git 版本控制工具', downloadUrl: 'https://git-scm.com/', fixCommand: 'winget install Git.Git' })
+        }
+        if (d.pnpm_version !== undefined && d.pnpm_version !== null) {
+          items.push({ name: 'pnpm', required: true, installed: true, version: d.pnpm_version, description: 'pnpm 包管理器', fixCommand: 'npm install -g pnpm' })
+        } else {
+          items.push({ name: 'pnpm', required: true, installed: false, description: 'pnpm 包管理器', fixCommand: 'npm install -g pnpm' })
+        }
+        if (selectedMode === 'docker' && d.docker_available !== undefined) {
+          items.push({ name: 'Docker', required: true, installed: d.docker_available, version: d.docker_version, description: '容器运行时', downloadUrl: 'https://www.docker.com/products/docker-desktop' })
+        }
+        if (d.port_occupied?.length > 0) {
+          items.push({ name: `端口 ${d.port_occupied.join(', ')}`, required: true, installed: false, description: '端口被占用' })
+        }
+        const passedCount = items.filter(i => i.installed).length
+        const report: EnvCheckReport = {
+          mode: selectedMode,
+          items,
+          allPassed: passedCount === items.length,
+          passedCount,
+          totalCount: items.length,
+        }
+        setEnvReport(report)
+        if (report.allPassed) {
+          setCurrentStep(DeployStep.READY)
+        } else {
+          setCurrentStep(DeployStep.FIXING)
+        }
       }
     } catch (error) {
       console.error('环境检测失败:', error)
@@ -87,33 +95,10 @@ export function DeployWizard() {
 
   const handleFixEnv = async (itemName: string) => {
     setFixingItems(prev => new Set(prev).add(itemName))
-    
     try {
-      // TODO: 调用后端命令 fix_environment(itemName, selectedMode)
-      // 模拟修复延迟
-      await new Promise(resolve => setTimeout(resolve, 3000))
-      
-      // 更新环境报告
-      if (envReport) {
-        const updatedItems = envReport.items.map(item =>
-          item.name === itemName ? { ...item, installed: true, version: 'latest' } : item
-        )
-        
-        const passedCount = updatedItems.filter(item => item.installed).length
-        
-        const updatedReport: EnvCheckReport = {
-          ...envReport,
-          items: updatedItems,
-          passedCount,
-          allPassed: passedCount === updatedItems.length
-        }
-        
-        setEnvReport(updatedReport)
-        
-        if (updatedReport.allPassed) {
-          setCurrentStep(DeployStep.READY)
-        }
-      }
+      const itemKey = itemName.toLowerCase().replace(/[.\s]/g, '')
+      await deployAPI.fixEnvironment(itemKey)
+      await handleEnvCheck()
     } catch (error) {
       console.error('环境修复失败:', error)
     } finally {
@@ -127,18 +112,35 @@ export function DeployWizard() {
 
   const handleDeploy = async () => {
     setCurrentStep(DeployStep.DEPLOYING)
-    
+    setDeployProgress(0)
     try {
-      // TODO: 调用后端命令 deploy_openclaw(selectedMode, config)
-      // 模拟部署进度
-      for (let i = 0; i <= 100; i += 10) {
-        setDeployProgress(i)
-        await new Promise(resolve => setTimeout(resolve, 500))
+      const res: any = await deployAPI.startDeployment(selectedMode!, {
+        install_path: 'C:\\openclaw',
+        port: 18789,
+      })
+      if (res.success && res.data?.job_id) {
+        const jobId = res.data.job_id
+        const pollInterval = setInterval(async () => {
+          try {
+            const statusRes: any = await deployAPI.getDeploymentStatus(jobId)
+            if (statusRes.success && statusRes.data) {
+              setDeployProgress(statusRes.data.progress || 0)
+              if (statusRes.data.status === 'Completed') {
+                clearInterval(pollInterval)
+                setCurrentStep(DeployStep.COMPLETED)
+              } else if (statusRes.data.status === 'Failed') {
+                clearInterval(pollInterval)
+                console.error('部署失败:', statusRes.data.error)
+              }
+            }
+          } catch (e) {
+            // ignore poll errors
+          }
+        }, 2000)
       }
-      
-      setCurrentStep(DeployStep.COMPLETED)
     } catch (error) {
       console.error('部署失败:', error)
+      setCurrentStep(DeployStep.FIXING)
     }
   }
 

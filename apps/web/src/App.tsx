@@ -8,6 +8,7 @@ import MyUsagePage from './modules/employee/MyUsagePage'
 import DashboardPage from './modules/dashboard/DashboardPage'
 import SetupPage from './modules/setup/SetupPage'
 import InstallWizard from './modules/setup/InstallWizard'
+import { DeployWizard } from './modules/setup/DeployWizard'
 import InstallProgress from './modules/setup/InstallProgress'
 import ConfigPage from './modules/config/ConfigPage'
 import MonitorPage from './modules/monitor/MonitorPage'
@@ -62,6 +63,7 @@ function App() {
         } />
         <Route path="setup" element={<SetupPage />} />
         <Route path="setup/wizard" element={<InstallWizard />} />
+        <Route path="setup/deploy" element={<DeployWizard />} />
         <Route path="setup/install" element={<InstallProgress />} />
         <Route path="config" element={<ConfigPage />} />
         <Route path="monitor" element={<MonitorPage />} />

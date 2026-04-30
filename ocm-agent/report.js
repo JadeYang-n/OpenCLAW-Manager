@@ -82,11 +82,11 @@ async function registerToManager() {
     }
 
     const registerData = {
-        name: `OpenCLAW Instance ${Date.now()}`,
-        host_ip: '127.0.0.1',
-        port: 18789,
+        instance_name: `OpenCLAW Instance ${Date.now()}`,
         version: healthInfo.version || 'unknown',
-        status: healthInfo.status || 'unknown'
+        gateway_port: 18789,
+        os: process.platform || 'unknown',
+        agent_version: '1.0.0'
     };
 
     const response = await sendRequest(
@@ -125,9 +125,8 @@ async function reportHeartbeat() {
     const heartbeatData = {
         instance_id: config.instance_id,
         status: healthInfo.status || 'unknown',
-        timestamp: new Date().toISOString(),
         version: healthInfo.version || 'unknown',
-        uptime: healthInfo.uptime || 0
+        reported_at: new Date().toISOString()
     };
 
     const response = await sendRequest(
@@ -169,7 +168,8 @@ async function reportUsage() {
                 prompt_tokens: usage.prompt_tokens || 0,
                 completion_tokens: usage.completion_tokens || 0,
                 total_tokens: usage.total_tokens || 0,
-                timestamp: new Date().toISOString()
+                cost: usage.cost || 0,
+                reported_at: new Date().toISOString()
             });
         }
     }
