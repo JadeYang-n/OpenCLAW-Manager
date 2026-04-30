@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react'
+import { useLanguageStore } from '../../stores/languageStore'
 import { notificationsAPI } from '../../services/api'
 import PageContainer from '../../components/PageContainer'
 
@@ -16,6 +17,7 @@ interface Notification {
 }
 
 const NotificationsPage: React.FC = () => {
+  const { t } = useLanguageStore()
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [unreadCount, setUnreadCount] = useState<number>(0)
   const [loading, setLoading] = useState(true)
@@ -91,24 +93,23 @@ const NotificationsPage: React.FC = () => {
 
   if (loading) {
     return (
-      <PageContainer title="通知中心">
+      <PageContainer title={t('notifications.title')}>
         <div className="flex items-center justify-center h-64">
-          <div className="text-gray-500">加载中...</div>
+          <div className="text-gray-500">{t('common.loading')}</div>
         </div>
       </PageContainer>
     )
   }
 
   return (
-    <PageContainer title="通知中心">
+    <PageContainer title={t('notifications.title')}>
       <div className="p-6">
-        {/* 顶部操作栏 */}
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h2 className="text-xl font-semibold text-gray-900">通知列表</h2>
+            <h2 className="text-xl font-semibold text-gray-900">{t('notifications.list')}</h2>
             {unreadCount > 0 && (
               <p className="text-sm text-gray-500 mt-1">
-                您有 <span className="text-blue-600 font-medium">{unreadCount}</span> 条未读通知
+                {t('notifications.unreadPrefix')} <span className="text-blue-600 font-medium">{unreadCount}</span> {t('notifications.unreadSuffix')}
               </p>
             )}
           </div>
@@ -117,7 +118,7 @@ const NotificationsPage: React.FC = () => {
               onClick={handleMarkAllAsRead}
               className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm"
             >
-              全部标记已读
+              {t('notifications.markAllRead')}
             </button>
           )}
         </div>
@@ -126,7 +127,7 @@ const NotificationsPage: React.FC = () => {
         {notifications.length === 0 ? (
           <div className="text-center py-12 bg-white rounded-lg border border-gray-200">
             <div className="text-4xl mb-4">🔔</div>
-            <p className="text-gray-500">暂无通知</p>
+            <p className="text-gray-500">{t('notifications.noNotifications')}</p>
           </div>
         ) : (
           <div className="space-y-4">
@@ -163,7 +164,7 @@ const NotificationsPage: React.FC = () => {
                           href={notification.link}
                           className="text-sm text-blue-600 hover:text-blue-700"
                         >
-                          查看详情 →
+                          {t('notifications.viewDetails')} →
                         </a>
                       )}
                       {!notification.is_read && (
@@ -171,7 +172,7 @@ const NotificationsPage: React.FC = () => {
                           onClick={() => handleMarkAsRead(notification.id)}
                           className="text-sm text-gray-500 hover:text-gray-700"
                         >
-                          标记已读
+                          {t('notifications.markRead')}
                         </button>
                       )}
                     </div>

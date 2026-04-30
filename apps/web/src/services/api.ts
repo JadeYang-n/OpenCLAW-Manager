@@ -7,8 +7,8 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080
 // Generic fetch function with error handling
 export async function fetchAPI<T = unknown>(endpoint: string, options: RequestInit = {}): Promise<T> {
   try {
-    // Get token from auth store
-    const token = useAuthStore.getState().getToken()
+    // Get token from auth store, fallback to localStorage for robustness
+    const token = useAuthStore.getState().getToken() || localStorage.getItem('auth_token')
 
     // 确保 endpoint 以 / 开头
     const normalizedEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
@@ -203,6 +203,22 @@ export const deployAPI = {
       method: 'POST',
       body: JSON.stringify({ mode }),
     });
+  },
+  fixEnvironment: (item: string) => {
+    return fetchAPI('/deploy/fix', {
+      method: 'POST',
+      body: JSON.stringify({ item }),
+    });
+  },
+};
+
+// Usage monitoring API
+export const usageAPI = {
+  getCurrentUsage: () => {
+    return fetchAPI('/usage/current');
+  },
+  getQuotaConfig: () => {
+    return fetchAPI('/usage/quota-config');
   },
 };
 
@@ -421,12 +437,6 @@ export const securityAPI = {
   },
   checkPorts: (data: { ports: number[] }) => {
     return fetchAPI('/security/check-ports', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
-  },
-  checkConfig: (data: Record<string, unknown>) => {
-    return fetchAPI('/security/check-config', {
       method: 'POST',
       body: JSON.stringify(data),
     });

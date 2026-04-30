@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { toast } from 'react-hot-toast'
 import { useAuthStore } from '../../stores/authStore'
+import { useLanguageStore } from '../../stores/languageStore'
 import * as deptApi from '../departments/api'
 import type { Department } from '../departments/types'
 import { userAPI } from '../../services/api'
@@ -27,6 +28,7 @@ interface CreateUserForm {
 
 export default function UsersPage() {
   const { user: currentUser, getToken } = useAuthStore()
+  const { t } = useLanguageStore()
   const [users, setUsers] = useState<User[]>([])
   const [loading, setLoading] = useState(true)
   const [showCreateForm, setShowCreateForm] = useState(false)
@@ -109,11 +111,11 @@ export default function UsersPage() {
 
   async function handleDelete(id: string, username: string) {
     if (id === currentUser?.id) {
-      toast.error('不能删除自己的账号')
+        toast.error(t('users.cannotDeleteSelf'))
       return
     }
 
-    if (!confirm(`确定要删除用户 "${username}" 吗？`)) return
+    if (!confirm(`${t('users.deleteConfirm', { username })}`)) return
 
     try {
       await userAPI.deleteUser(id)
@@ -127,11 +129,11 @@ export default function UsersPage() {
 
   function getRoleName(role: string) {
     const roles: Record<string, string> = {
-      admin: '👑 超级管理员',
-      operator: '🔧 运维管理员',
-      dept_admin: '📋 部门管理员',
-      employee: '👤 普通员工',
-      auditor: '📊 审计员',
+      admin: t('role.admin'),
+      operator: t('role.operator'),
+      dept_admin: t('role.deptAdmin'),
+      employee: t('role.employee'),
+      auditor: t('role.auditor'),
     }
     return roles[role] || role
   }
@@ -152,16 +154,16 @@ export default function UsersPage() {
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <h1 className="text-2xl font-bold text-red-600 mb-4">
-            🔒 权限不足
+            🔒 {t('error.permissionDenied')}
           </h1>
           <p className="text-gray-600">
-            只有超级管理员可以访问用户管理页面
+            {t('error.permissionMessage')}
           </p>
           <button
             onClick={() => window.history.back()}
             className="mt-4 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
           >
-            返回上一页
+            {t('error.back')}
           </button>
         </div>
       </div>
@@ -169,18 +171,18 @@ export default function UsersPage() {
   }
 
   if (loading) {
-    return <div className="p-6">加载中...</div>
+    return <div className="p-6">{t('common.loading')}</div>
   }
 
   return (
     <div className="p-6">
       <div className="mb-6 flex justify-between items-center">
-        <h1 className="text-2xl font-bold">用户管理</h1>
+        <h1 className="text-2xl font-bold">{t('users.title')}</h1>
         <button
           onClick={() => setShowCreateForm(!showCreateForm)}
           className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
         >
-          + 新建用户
+          + {t('users.create')}
         </button>
       </div>
 
@@ -192,10 +194,10 @@ export default function UsersPage() {
 
       {showCreateForm && (
         <div className="mb-6 p-4 border rounded bg-white">
-          <h2 className="text-lg font-semibold mb-4">创建新用户</h2>
+          <h2 className="text-lg font-semibold mb-4">{t('users.createUser')}</h2>
           <form onSubmit={handleCreate} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium mb-1">用户名</label>
+              <label className="block text-sm font-medium mb-1">{t('users.username')}</label>
               <input
                 type="text"
                 value={createForm.username}
@@ -205,7 +207,7 @@ export default function UsersPage() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">密码</label>
+              <label className="block text-sm font-medium mb-1">{t('users.password')}</label>
               <input
                 type="password"
                 value={createForm.password}
@@ -215,27 +217,27 @@ export default function UsersPage() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">角色</label>
+              <label className="block text-sm font-medium mb-1">{t('users.role')}</label>
               <select
                 value={createForm.role}
                 onChange={(e) => setCreateForm({ ...createForm, role: e.target.value })}
                 className="w-full px-3 py-2 border rounded"
               >
-                <option value="employee">👤 普通员工</option>
-                <option value="dept_admin">📋 部门管理员</option>
-                <option value="operator">🔧 运维管理员</option>
-                <option value="auditor">📊 审计员</option>
-                <option value="admin">👑 超级管理员</option>
+                <option value="employee">{t('role.employee')}</option>
+                <option value="dept_admin">{t('role.deptAdmin')}</option>
+                <option value="operator">{t('role.operator')}</option>
+                <option value="auditor">{t('role.auditor')}</option>
+                <option value="admin">{t('role.admin')}</option>
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">所属部门（可选）</label>
+              <label className="block text-sm font-medium mb-1">{t('users.department')}</label>
               <select
                 value={createForm.department_id}
                 onChange={(e) => setCreateForm({ ...createForm, department_id: e.target.value })}
                 className="w-full px-3 py-2 border rounded"
               >
-                <option value="">不绑定部门</option>
+                <option value="">{t('users.noDepartment')}</option>
                 {departments.map(dept => (
                   <option key={dept.id} value={dept.id}>{dept.name}</option>
                 ))}
@@ -246,14 +248,14 @@ export default function UsersPage() {
                 type="submit"
                 className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
               >
-                创建
+                {t('users.create')}
               </button>
               <button
                 type="button"
                 onClick={() => setShowCreateForm(false)}
                 className="px-4 py-2 bg-gray-300 text-gray-700 rounded hover:bg-gray-400"
               >
-                取消
+                {t('users.cancel')}
               </button>
             </div>
           </form>
@@ -264,11 +266,11 @@ export default function UsersPage() {
         <table className="w-full">
           <thead className="bg-gray-50 border-b">
             <tr>
-              <th className="px-6 py-3 text-left font-medium text-gray-700">用户名</th>
-              <th className="px-6 py-3 text-left font-medium text-gray-700">角色</th>
-              <th className="px-6 py-3 text-left font-medium text-gray-700">部门</th>
-              <th className="px-6 py-3 text-left font-medium text-gray-700">最后登录</th>
-              <th className="px-6 py-3 text-left font-medium text-gray-700">操作</th>
+              <th className="px-6 py-3 text-left font-medium text-gray-700">{t('users.username')}</th>
+              <th className="px-6 py-3 text-left font-medium text-gray-700">{t('users.role')}</th>
+              <th className="px-6 py-3 text-left font-medium text-gray-700">{t('users.department')}</th>
+              <th className="px-6 py-3 text-left font-medium text-gray-700">{t('users.lastLogin')}</th>
+              <th className="px-6 py-3 text-left font-medium text-gray-700">{t('users.operations')}</th>
             </tr>
           </thead>
           <tbody>
@@ -290,7 +292,7 @@ export default function UsersPage() {
                     className="text-red-600 hover:text-red-800"
                     disabled={user.id === currentUser?.id}
                   >
-                    {user.id === currentUser?.id ? '不能删除自己' : '删除'}
+                    {user.id === currentUser?.id ? t('users.cannotDeleteSelf') : t('users.delete')}
                   </button>
                 </td>
               </tr>
@@ -298,7 +300,7 @@ export default function UsersPage() {
             {users.length === 0 && (
               <tr>
                 <td colSpan={5} className="px-6 py-8 text-center text-gray-500">
-                  暂无用户
+                  {t('users.noUsers')}
                 </td>
               </tr>
             )}

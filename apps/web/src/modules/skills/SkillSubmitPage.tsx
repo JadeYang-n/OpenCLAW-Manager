@@ -50,6 +50,7 @@ export default function SkillSubmitPage() {
     description: '',
     category: 'developer_tools',
     tags: '' as string | string[],
+    skillFile: '',
   })
   const [showSchema, setShowSchema] = useState(false)
   const [paramFields, setParamFields] = useState<ParamField[]>([])
@@ -148,9 +149,13 @@ export default function SkillSubmitPage() {
         : []
       const paramSchema = buildParamSchema()
 
+      const desc = formData.skillFile
+        ? `${formData.description}\n[Skill File: ${formData.skillFile}]`
+        : formData.description
+
       await skillsAPI.createSkillStore({
         name: formData.name,
-        description: formData.description,
+        description: desc,
         category: formData.category,
         tags: tagsArray,
         instance_id: userInstanceId,
@@ -258,6 +263,22 @@ export default function SkillSubmitPage() {
                 className="w-full p-2 border rounded"
                 placeholder={isZh ? '例如: web, search, api' : 'e.g., web, search, api'}
               />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-1">
+                {isZh ? 'Skill 文件名（可选）' : 'Skill File Name (Optional)'}
+              </label>
+              <input
+                type="text"
+                value={formData.skillFile}
+                onChange={e => setFormData({ ...formData, skillFile: e.target.value })}
+                className="w-full p-2 border rounded"
+                placeholder={isZh ? '例如: my-skill.md 或完整路径' : 'e.g., my-skill.md or full path'}
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                {isZh ? '输入本地 skill 文件名，便于审核人员定位' : 'Enter local skill file name to help reviewers locate the file'}
+              </p>
             </div>
 
             {/* 参数配置区域 */}

@@ -11,12 +11,6 @@ interface PortCheck {
   isOpen: boolean | null
 }
 
-// 配置检查项
-interface ConfigItem {
-  key: string
-  value: string
-}
-
 export default function SecurityPage() {
   // 密码强度检查
   const [testPassword, setTestPassword] = useState('')
@@ -40,20 +34,6 @@ export default function SecurityPage() {
   ])
   const [portLoading, setPortLoading] = useState(false)
   const [customPort, setCustomPort] = useState('')
-
-  // 配置泄露检查
-  const [configItems, setConfigItems] = useState<ConfigItem[]>([
-    { key: 'OPENAI_API_KEY', value: '' },
-    { key: 'FEISHU_APP_SECRET', value: '' },
-    { key: 'DATABASE_URL', value: '' },
-    { key: 'JWT_SECRET', value: '' },
-  ])
-  const [configResult, setConfigResult] = useState<{
-    has_leaks: boolean
-    leak_types: string[]
-    suggestions: string[]
-  } | null>(null)
-  const [configLoading, setConfigLoading] = useState(false)
 
   // 测试密码强度
   async function handleTestPassword() {
@@ -132,49 +112,11 @@ export default function SecurityPage() {
     setPorts(prev => prev.filter(p => p.port !== port))
   }
 
-  // 配置泄露检查
-  async function handleConfigCheck() {
-    const configJson = JSON.stringify(
-      configItems.reduce((acc, item) => {
-        if (item.value) acc[item.key] = item.value
-        return acc
-      }, {} as Record<string, string>)
-    )
-    if (!configJson || configJson === '{}') {
-      toast.error('请至少输入一个配置值')
-      return
-    }
-    setConfigLoading(true)
-    try {
-      const res: any = await securityAPI.checkConfig({ config_json: configJson })
-      setConfigResult(res.data)
-      if (res.data.has_leaks) {
-        toast.error(`发现 ${res.data.leak_types.length} 个配置泄露风险`)
-      } else {
-        toast.success('配置安全，未发现泄露风险')
-      }
-    } catch (e: any) {
-      toast.error(`配置检查失败: ${e.message}`)
-    } finally {
-      setConfigLoading(false)
-    }
-  }
-
-  // 添加配置项
-  function handleAddConfig() {
-    setConfigItems(prev => [...prev, { key: '', value: '' }])
-  }
-
-  // 移除配置项
-  function handleRemoveConfig(index: number) {
-    setConfigItems(prev => prev.filter((_, i) => i !== index))
-  }
-
   return (
     <div className="p-6 space-y-6">
       <div>
         <h1 className="text-2xl font-bold">安全中心</h1>
-        <p className="text-muted-foreground mt-1">检测密码强度、端口开放状态和配置泄露风险</p>
+        <p className="text-muted-foreground mt-1">检测密码强度、端口开放状态</p>
       </div>
 
       {/* 密码强度检测 */}
@@ -262,79 +204,6 @@ export default function SecurityPage() {
           <Button onClick={handlePortCheck} disabled={portLoading} className="w-full">
             {portLoading ? '扫描中...' : '开始扫描'}
           </Button>
-        </CardContent>
-      </Card>
-
-      {/* 配置泄露检测 */}
-      <Card>
-        <CardHeader>
-          <CardTitle>🔒 配置泄露检测</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <p className="text-sm text-muted-foreground">
-            输入配置值，检测是否存在明文密钥、弱密码等泄露风险
-          </p>
-          <div className="space-y-2">
-            {configItems.map((item, index) => (
-              <div key={index} className="flex gap-2">
-                <input
-                  value={item.key}
-                  onChange={e => {
-                    setConfigItems(prev => prev.map((ci, i) =>
-                      i === index ? { ...ci, key: e.target.value } : ci
-                    ))
-                  }}
-                  placeholder="配置键名"
-                  className="w-40 px-3 py-2 border rounded-md"
-                />
-                <input
-                  value={item.value}
-                  onChange={e => {
-                    setConfigItems(prev => prev.map((ci, i) =>
-                      i === index ? { ...ci, value: e.target.value } : ci
-                    ))
-                  }}
-                  placeholder="配置值"
-                  type="password"
-                  className="flex-1 px-3 py-2 border rounded-md"
-                />
-                <button
-                  onClick={() => handleRemoveConfig(index)}
-                  className="px-2 text-gray-400 hover:text-red-500"
-                >
-                  ✕
-                </button>
-              </div>
-            ))}
-          </div>
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={handleAddConfig}>添加配置</Button>
-            <Button onClick={handleConfigCheck} disabled={configLoading} className="flex-1">
-              {configLoading ? '检测中...' : '检测配置'}
-            </Button>
-          </div>
-          {configResult && (
-            <div className={`p-4 rounded-lg ${configResult.has_leaks ? 'bg-red-50' : 'bg-green-50'}`}>
-              <p className={`font-medium mb-2 ${configResult.has_leaks ? 'text-red-600' : 'text-green-600'}`}>
-                {configResult.has_leaks ? '发现风险' : '配置安全'}
-              </p>
-              {configResult.leak_types.length > 0 && (
-                <div className="space-y-1">
-                  {configResult.leak_types.map((t, i) => (
-                    <p key={i} className="text-sm text-red-600">• {t}</p>
-                  ))}
-                </div>
-              )}
-              {configResult.suggestions.length > 0 && (
-                <div className="space-y-1 mt-2">
-                  <p className="text-sm font-medium text-gray-700">建议：</p>
-                  {configResult.suggestions.map((s, i) => (
-                    <p key={i} className="text-sm text-gray-600">• {s}</p>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
         </CardContent>
       </Card>
     </div>

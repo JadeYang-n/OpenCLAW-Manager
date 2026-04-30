@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
+import { useLanguageStore } from '../../stores/languageStore'
 import { useAuthStore } from '../../stores/authStore'
+import { usageAPI } from '../../services/api'
 import * as deptApi from '../departments/api'
 import type { Department } from '../departments/types'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
@@ -63,6 +65,7 @@ const CHART_COLORS = {
 }
 
 export default function TokenAnalysisPage() {
+  const { t, language } = useLanguageStore()
   const { getToken } = useAuthStore()
   const [loading, setLoading] = useState(true)
   const [usage, setUsage] = useState<TokenUsage[]>([])
@@ -85,72 +88,64 @@ export default function TokenAnalysisPage() {
   const loadTokenData = useCallback(async () => {
     try {
       setLoading(true)
-      
-      // 调用后端API获取Token usage数据
-      const token = localStorage.getItem('auth_token')
-      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api/v1';
-      const response = await fetch(`${API_BASE_URL}/gateway/token/usage`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token && { 'Authorization': `Bearer ${token}` }),
-        },
-      })
-      
-      if (!response.ok) {
-        throw new Error(`Failed to fetch token usage: ${response.statusText}`)
-      }
-      
-      const data = await response.json()
-      
-      if (data.success) {
-        setUsage(data.data || [])
-        
-        // 从实际数据计算每日统计
-        const dailyStatsMap = new Map<string, DailyStats>()
-        const deptStatsMap = new Map<string, DepartmentStats>()
-        
-        ;(data.data || []).forEach((record: any) => {
-          // 提取日期（从 "2026-03-10 23:00:00" 提取 "03-10"）
-          const dateKey = (record.reported_at || record.timestamp).split(' ')[0].replace(/-/g, '-').substr(5)
-          const existingDaily = dailyStatsMap.get(dateKey) || {
-            date: dateKey,
-            total_tokens: 0,
-            total_cost: 0,
-            request_count: 0
-          }
-          existingDaily.total_tokens += record.total_tokens
-          existingDaily.total_cost += record.cost
-          existingDaily.request_count += 1
-          dailyStatsMap.set(dateKey, existingDaily)
 
-          // 计算部门统计
-          if (record.department_id && record.department_name) {
-            const existingDept = deptStatsMap.get(record.department_id) || {
-              department_id: record.department_id,
-              department_name: record.department_name,
-              total_tokens: 0,
-              total_cost: 0,
-              request_count: 0,
-              instance_count: 0
-            }
-            existingDept.total_tokens += record.total_tokens
-            existingDept.total_cost += record.cost
-            existingDept.request_count += 1
-            if (existingDept.instance_count === undefined || existingDept.instance_count === 0) {
-              existingDept.instance_count = new Set([record.instance_id]).size
-            }
-            deptStatsMap.set(record.department_id, existingDept)
-          }
-        })
+      // 调用 /usage/current 获取真实用量数据
+      const usageRes = await usageAPI.getCurrentUsage()
+      const data = (usageRes as any)
 
-        // 转换为数组并按日期排序（最新的在前）
-        const sortedDaily = Array.from(dailyStatsMap.values())
-          .sort((a, b) => b.date.localeCompare(a.date))
-        setDailyStats(sortedDaily)
+      if (data.success && data.data) {
+        const stats = data.data
 
-        // 转换部门统计为数组
-        setDepartmentStats(Array.from(deptStatsMap.values()))
+        // 构建使用记录（按厂商拆分）
+        const usageRecords: TokenUsage[] = (stats.by_provider || []).map((p: any, i: number) => ({
+          id: `provider-${i}`,
+          instance_id: '',
+          instance_name: p.provider_name || p.provider,
+          reported_at: new Date().toISOString().replace('T', ' ').slice(0, 19),
+          model: p.provider,
+          prompt_tokens: Math.round(p.tokens * 0.6),
+          completion_tokens: Math.round(p.tokens * 0.4),
+          total_tokens: p.tokens,
+          cost: p.cost,
+          department_id: undefined,
+          department_name: undefined,
+        }))
+
+        // 添加部门记录
+        const deptRecords: TokenUsage[] = (stats.by_department || []).map((d: any, i: number) => ({
+          id: `dept-${i}`,
+          instance_id: '',
+          instance_name: d.department_name || d.department,
+          reported_at: new Date().toISOString().replace('T', ' ').slice(0, 19),
+          model: 'aggregate',
+          prompt_tokens: Math.round(d.tokens * 0.6),
+          completion_tokens: Math.round(d.tokens * 0.4),
+          total_tokens: d.tokens,
+          cost: d.cost,
+          department_id: d.department,
+          department_name: d.department_name,
+        }))
+
+        setUsage([...usageRecords, ...deptRecords])
+
+        // 每日统计（聚合显示）
+        const today = new Date().toISOString().slice(5, 10)
+        setDailyStats([{
+          date: today,
+          total_tokens: stats.total_tokens || 0,
+          total_cost: stats.total_cost || 0,
+          request_count: stats.request_count || 0,
+        }])
+
+        // 部门统计
+        setDepartmentStats((stats.by_department || []).map((d: any) => ({
+          department_id: d.department,
+          department_name: d.department_name,
+          total_tokens: d.tokens,
+          total_cost: d.cost,
+          request_count: 0,
+          instance_count: 0,
+        })))
       }
     } catch (error) {
       console.error('加载 Token 数据失败:', error)
@@ -160,7 +155,7 @@ export default function TokenAnalysisPage() {
     } finally {
       setLoading(false)
     }
-  }, [getToken])
+  }, [])
 
   useEffect(() => {
     loadTokenData()
@@ -221,9 +216,9 @@ export default function TokenAnalysisPage() {
       {/* Header Section */}
       <div className="mb-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Token 分析</h1>
+          <h1 className="text-2xl font-bold text-foreground">{t('token.title')}</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            查看各实例的 Token 使用情况和成本分析
+            {t('token.subtitle')}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -236,7 +231,7 @@ export default function TokenAnalysisPage() {
                 variant={selectedPeriod === period ? 'default' : 'outline'}
                 className={selectedPeriod === period ? 'bg-blue-600 text-white hover:bg-blue-700' : ''}
               >
-                {period === '7d' ? '7 天' : period === '30d' ? '30 天' : '90 天'}
+                {period === '7d' ? t('token.days7') : period === '30d' ? t('token.days30') : t('token.days90')}
               </Button>
             ))}
           </div>
@@ -244,11 +239,11 @@ export default function TokenAnalysisPage() {
           {/* Action Buttons */}
           <Button variant="outline" onClick={loadData}>
             <Filter className="w-4 h-4 mr-2" />
-            刷新
+            {t('token.refresh')}
           </Button>
           <Button variant="outline" onClick={exportData}>
             <Download className="w-4 h-4 mr-2" />
-            导出CSV
+            {t('token.exportCSV')}
           </Button>
         </div>
       </div>
@@ -312,21 +307,21 @@ export default function TokenAnalysisPage() {
         <Card className="mb-6">
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-foreground"><Filter className="inline-block w-5 h-5 mr-2" /> 统计维度</h2>
+              <h2 className="text-lg font-semibold text-foreground"><Filter className="inline-block w-5 h-5 mr-2" /> {t('token.dimension')}</h2>
               <div className="flex rounded-md shadow-sm">
                 <Button
                   onClick={() => setShowDepartmentView(false)}
                   variant={!showDepartmentView ? 'default' : 'outline'}
                   className={!showDepartmentView ? 'bg-blue-600 text-white hover:bg-blue-700' : ''}
                 >
-                  按时间
+                  {t('token.viewByTime')}
                 </Button>
                 <Button
                   onClick={() => setShowDepartmentView(true)}
                   variant={showDepartmentView ? 'default' : 'outline'}
                   className={showDepartmentView ? 'bg-blue-600 text-white hover:bg-blue-700' : ''}
                 >
-                  按部门
+                  {t('token.viewByDepartment')}
                 </Button>
               </div>
             </div>
@@ -403,7 +398,7 @@ export default function TokenAnalysisPage() {
         <Card className="mb-6">
           <CardHeader>
             <CardTitle className="text-lg font-semibold text-foreground">
-              <BarChart3 className="inline-block w-5 h-5 mr-2" /> 每日趋势
+              <BarChart3 className="inline-block w-5 h-5 mr-2" /> {t('token.dailyTrend')}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -484,7 +479,7 @@ export default function TokenAnalysisPage() {
       <Card>
         <CardHeader className="border-b">
           <CardTitle className="text-lg font-semibold text-foreground">
-              <History className="inline-block w-5 h-5 mr-2" /> 使用记录
+              <History className="inline-block w-5 h-5 mr-2" /> {t('token.usageRecords')}
             </CardTitle>
         </CardHeader>
         <CardContent>
@@ -521,7 +516,7 @@ export default function TokenAnalysisPage() {
               {usage.length === 0 && (
                 <tr>
                   <td colSpan={7} className="px-6 py-8 text-center text-muted-foreground">
-                    暂无使用记录
+                    {t('token.noRecords')}
                   </td>
                 </tr>
               )}
@@ -538,9 +533,19 @@ export default function TokenAnalysisPage() {
           </div>
           <div className="ml-3">
             <p className="text-sm text-blue-800 dark:text-blue-200">
-              <span className="font-medium">ℹ️ 提示：</span>
-              Token 分析页面展示各实例的详细使用情况和成本花费。部门负责人只能查看本部门数据，普通员工只能查看自己的数据。
+              <span className="font-medium">ℹ️ {t('token.tip')}</span>
+              {t('token.tipText')}
             </p>
+            {usage.length > 0 && usage.every(u => u.id.startsWith('test-') || (u.instance_name && u.instance_name.toLowerCase().includes('test'))) && (
+              <p className="text-sm text-amber-700 dark:text-amber-300 mt-2 font-medium">
+                ⚠️ {t('token.testDataWarning')}
+              </p>
+            )}
+            {usage.length === 0 && dailyStats.length === 0 && (
+              <p className="text-sm text-amber-700 dark:text-amber-300 mt-2 font-medium">
+                {t('token.noRealData')}
+              </p>
+            )}
           </div>
         </div>
       </div>
