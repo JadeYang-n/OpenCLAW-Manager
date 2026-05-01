@@ -177,16 +177,25 @@ pub fn delete_config(token: String, config_id: String) -> Result<(), String> {
 
 /// 测试配置
 #[tauri::command]
-pub fn test_config(token: String, _config: CreateConfigRequest) -> Result<TestResult, String> {
+pub fn test_config(token: String, config: CreateConfigRequest) -> Result<TestResult, String> {
     let conn = db::get_connection().map_err(|e| e.to_string())?;
-    
+
     // 验证 token
     let _user = auth::verify_token(&token, &conn)?;
-    
-    // TODO: 实现实际配置测试逻辑
-    // 目前模拟测试
-    Ok(TestResult {
-        success: true,
-        message: "配置格式验证通过".to_string(),
-    })
+
+    // 验证 config_json 是否为合法的 JSON 对象
+    match serde_json::from_str::<serde_json::Value>(&config.config_json) {
+        Ok(v) if v.is_object() => Ok(TestResult {
+            success: true,
+            message: "配置格式验证通过".to_string(),
+        }),
+        Ok(_) => Ok(TestResult {
+            success: false,
+            message: "配置内容必须是 JSON 对象".to_string(),
+        }),
+        Err(e) => Ok(TestResult {
+            success: false,
+            message: format!("JSON 解析错误：{}", e),
+        }),
+    }
 }

@@ -346,10 +346,28 @@ pub fn batch_operation(token: String, req: BatchOperationRequest) -> Result<Vec<
                 }
             }
             "start" => {
-                results.push(format!("⚠️ 启动操作暂不支持（实例 {}）", name));
+                match start_openclaw_instance(&endpoint, &admin_token) {
+                    Ok(_) => {
+                        results.push(format!("✅ 实例 {} 启动成功", name));
+                        auth::log_audit_operation(&conn, &user, "instance", "start", "H", "success",
+                            Some(&format!("{{\"instance_id\": \"{}\", \"name\": \"{}\"}}", id, name)));
+                    }
+                    Err(e) => {
+                        results.push(format!("❌ 实例 {} 启动失败：{}", name, e));
+                    }
+                }
             }
             "stop" => {
-                results.push(format!("⚠️ 停止操作暂不支持（实例 {}）", name));
+                match stop_openclaw_instance(&endpoint, &admin_token) {
+                    Ok(_) => {
+                        results.push(format!("✅ 实例 {} 已停止", name));
+                        auth::log_audit_operation(&conn, &user, "instance", "stop", "H", "success",
+                            Some(&format!("{{\"instance_id\": \"{}\", \"name\": \"{}\"}}", id, name)));
+                    }
+                    Err(e) => {
+                        results.push(format!("❌ 实例 {} 停止失败：{}", name, e));
+                    }
+                }
             }
             "upgrade" => {
                 results.push(format!("⚠️ 升级操作暂不支持（实例 {}）", name));
@@ -365,25 +383,44 @@ pub fn batch_operation(token: String, req: BatchOperationRequest) -> Result<Vec<
 
 /// 重启 OpenCLAW 实例（调用其 API）
 fn restart_openclaw_instance(endpoint: &str, admin_token: &str) -> Result<(), String> {
-    // 构建 OpenCLAW 管理 API URL
     let restart_url = format!("{}/api/admin/restart", endpoint.trim_end_matches('/'));
-    
-    // 创建 HTTP 客户端
     let client = reqwest::blocking::Client::new();
-    
-    // 发送重启请求，使用管理 Token
     let response = client
         .post(&restart_url)
-        .header("X-Admin-Token", admin_token)  // 使用管理 Token 鉴权
+        .header("X-Admin-Token", admin_token)
         .timeout(std::time::Duration::from_secs(30))
         .send()
         .map_err(|e| format!("HTTP 请求失败：{}", e))?;
-    
-    if response.status().is_success() {
-        Ok(())
-    } else {
-        Err(format!("API 返回错误状态：{}", response.status()))
-    }
+    if response.status().is_success() { Ok(()) }
+    else { Err(format!("API 返回错误状态：{}", response.status())) }
+}
+
+/// 启动 OpenCLAW 实例
+fn start_openclaw_instance(endpoint: &str, admin_token: &str) -> Result<(), String> {
+    let start_url = format!("{}/api/admin/start", endpoint.trim_end_matches('/'));
+    let client = reqwest::blocking::Client::new();
+    let response = client
+        .post(&start_url)
+        .header("X-Admin-Token", admin_token)
+        .timeout(std::time::Duration::from_secs(30))
+        .send()
+        .map_err(|e| format!("HTTP 请求失败：{}", e))?;
+    if response.status().is_success() { Ok(()) }
+    else { Err(format!("API 返回错误状态：{}", response.status())) }
+}
+
+/// 停止 OpenCLAW 实例
+fn stop_openclaw_instance(endpoint: &str, admin_token: &str) -> Result<(), String> {
+    let stop_url = format!("{}/api/admin/stop", endpoint.trim_end_matches('/'));
+    let client = reqwest::blocking::Client::new();
+    let response = client
+        .post(&stop_url)
+        .header("X-Admin-Token", admin_token)
+        .timeout(std::time::Duration::from_secs(30))
+        .send()
+        .map_err(|e| format!("HTTP 请求失败：{}", e))?;
+    if response.status().is_success() { Ok(()) }
+    else { Err(format!("API 返回错误状态：{}", response.status())) }
 }
 
 /// 扫描本地实例（18789-18799 端口）
@@ -577,19 +614,35 @@ pub fn add_local_instance(token: String, req: AddLocalInstanceRequest) -> Result
 
 /// 获取实例详情
 #[tauri::command]
-pub fn get_instance_detail(instance_id: String) -> Result<InstanceInfo, String> {
-    let _conn = db::get_connection().map_err(|e| e.to_string())?;
-    
-    // TODO: 查询单个实例详情
-    // 暂时返回模拟数据
+pub fn get_instance_detail(token: String, instance_id: String) -> Result<InstanceInfo, String> {
+    let conn = db::get_connection().map_err(|e| e.to_string())?;
+    let user = auth::verify_token(&token, &conn)?;
+    auth::check_permission(&user.role, &["admin", "operator", "dept_admin", "employee", "auditor"], "instance", "read")?;
+
+    let instance = db::get_instance(&conn, &instance_id)
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| format!("实例 {} 不存在", instance_id))?;
+
+    let (id, name, endpoint, _admin_token, status, version, last_heartbeat) = instance;
+    let endpoint_clean = endpoint.trim_start_matches("http://");
+    let parts: Vec<&str> = endpoint_clean.split(':').collect();
+    let host_ip = parts.first().map(|s| s.to_string()).unwrap_or_else(|| "unknown".to_string());
+    let admin_port = parts.get(1).and_then(|s| s.parse().ok()).unwrap_or(18789);
+
+    let created_at = conn.query_row(
+        "SELECT created_at FROM instances WHERE id = ?",
+        [&instance_id],
+        |r| r.get::<_, Option<String>>(0),
+    ).ok().flatten().unwrap_or_else(|| "unknown".to_string());
+
     Ok(InstanceInfo {
-        id: instance_id,
-        name: "示例实例".to_string(),
-        host_ip: "127.0.0.1".to_string(),
-        admin_port: 18789,
-        status: "running".to_string(),
-        version: Some("2026.2.0".to_string()),
-        last_heartbeat: Some(chrono::Utc::now().timestamp()),
-        created_at: Some("2026-03-10T00:00:00".to_string()),
+        id,
+        name,
+        host_ip,
+        admin_port,
+        status,
+        version: version.filter(|v| !v.is_empty()),
+        last_heartbeat,
+        created_at: Some(created_at),
     })
 }

@@ -1,0 +1,7 @@
+{
+  "manager_url": "http://MANAGER_IP:8080",
+  "instance_token": "YOUR_INSTANCE_TOKEN",
+  "collection_interval_seconds": 60,
+  "state_file": "collector-state.json",
+  "log_file": "collector.log"
+}

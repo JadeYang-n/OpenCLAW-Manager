@@ -5,6 +5,12 @@ import { useLanguageStore } from '../../stores/languageStore'
 import * as deptApi from '../departments/api'
 import type { Department } from '../departments/types'
 import { userAPI } from '../../services/api'
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { PageContainer } from '../../components/ui/PageContainer'
+import { RoleBadge } from '@/components/ui/role-badge'
+import { Input } from '@/components/ui/form'
+import { Users, UserPlus } from 'lucide-react'
 
 interface User {
   id: string
@@ -84,7 +90,6 @@ export default function UsersPage() {
       }) as { success: boolean; data?: { id: string } }
 
       if (result.success && result.data) {
-        // 如果选择了部门，绑定用户到部门
         if (createForm.department_id) {
           try {
             const token = getToken() || ''
@@ -115,7 +120,7 @@ export default function UsersPage() {
       return
     }
 
-    if (!confirm(`${t('users.deleteConfirm', { username })}`)) return
+    if (!confirm(`确定要删除用户 "${username}" 吗？`)) return
 
     try {
       await userAPI.deleteUser(id)
@@ -138,175 +143,168 @@ export default function UsersPage() {
     return roles[role] || role
   }
 
-  function getRoleColor(role: string) {
-    const colors: Record<string, string> = {
-      admin: 'bg-red-100 text-red-800',
-      operator: 'bg-blue-100 text-blue-800',
-      dept_admin: 'bg-green-100 text-green-800',
-      employee: 'bg-gray-100 text-gray-800',
-      auditor: 'bg-purple-100 text-purple-800',
-    }
-    return colors[role] || 'bg-gray-100 text-gray-800'
-  }
-
   if (currentUser?.role !== 'admin') {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold text-red-600 mb-4">
-            🔒 {t('error.permissionDenied')}
-          </h1>
-          <p className="text-gray-600">
-            {t('error.permissionMessage')}
-          </p>
-          <button
-            onClick={() => window.history.back()}
-            className="mt-4 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-          >
-            {t('error.back')}
-          </button>
-        </div>
-      </div>
+      <PageContainer title={t('error.permissionDenied')}>
+        <Card className="max-w-md mx-auto">
+          <CardHeader>
+            <CardTitle className="text-center text-error">🔒 {t('error.permissionDenied')}</CardTitle>
+          </CardHeader>
+          <CardContent className="text-center space-y-4">
+            <p className="text-muted-foreground">
+              {t('error.permissionMessage')}
+            </p>
+            <Button onClick={() => window.history.back()}>
+              {t('error.back')}
+            </Button>
+          </CardContent>
+        </Card>
+      </PageContainer>
     )
   }
 
   if (loading) {
-    return <div className="p-6">{t('common.loading')}</div>
+    return (
+      <PageContainer title={t('users.title')}>
+        <div className="flex items-center justify-center h-64">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+        </div>
+      </PageContainer>
+    )
   }
 
   return (
-    <div className="p-6">
-      <div className="mb-6 flex justify-between items-center">
-        <h1 className="text-2xl font-bold">{t('users.title')}</h1>
-        <button
-          onClick={() => setShowCreateForm(!showCreateForm)}
-          className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
-        >
-          + {t('users.create')}
-        </button>
+    <PageContainer title={t('users.title')} description="管理系统用户和角色">
+      {/* Action Header */}
+      <div className="flex justify-between items-center mb-6">
+        <div className="flex items-center gap-3">
+          <Users className="w-6 h-6 text-primary" />
+          <span className="text-sm text-muted-foreground">{users.length} 个用户</span>
+        </div>
+        <Button variant="primary" onClick={() => setShowCreateForm(!showCreateForm)}>
+          <UserPlus className="w-4 h-4 mr-2" />
+          {t('users.create')}
+        </Button>
       </div>
 
       {error && (
-        <div className="bg-red-100 text-red-800 p-4 rounded-md mb-6">
+        <div className="bg-error/10 text-error p-4 rounded-lg mb-6 text-sm">
           {error}
         </div>
       )}
 
+      {/* Create User Form */}
       {showCreateForm && (
-        <div className="mb-6 p-4 border rounded bg-white">
-          <h2 className="text-lg font-semibold mb-4">{t('users.createUser')}</h2>
-          <form onSubmit={handleCreate} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium mb-1">{t('users.username')}</label>
-              <input
-                type="text"
-                value={createForm.username}
-                onChange={(e) => setCreateForm({ ...createForm, username: e.target.value })}
-                className="w-full px-3 py-2 border rounded"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-1">{t('users.password')}</label>
-              <input
-                type="password"
-                value={createForm.password}
-                onChange={(e) => setCreateForm({ ...createForm, password: e.target.value })}
-                className="w-full px-3 py-2 border rounded"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-1">{t('users.role')}</label>
-              <select
-                value={createForm.role}
-                onChange={(e) => setCreateForm({ ...createForm, role: e.target.value })}
-                className="w-full px-3 py-2 border rounded"
-              >
-                <option value="employee">{t('role.employee')}</option>
-                <option value="dept_admin">{t('role.deptAdmin')}</option>
-                <option value="operator">{t('role.operator')}</option>
-                <option value="auditor">{t('role.auditor')}</option>
-                <option value="admin">{t('role.admin')}</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-1">{t('users.department')}</label>
-              <select
-                value={createForm.department_id}
-                onChange={(e) => setCreateForm({ ...createForm, department_id: e.target.value })}
-                className="w-full px-3 py-2 border rounded"
-              >
-                <option value="">{t('users.noDepartment')}</option>
-                {departments.map(dept => (
-                  <option key={dept.id} value={dept.id}>{dept.name}</option>
-                ))}
-              </select>
-            </div>
-            <div className="flex space-x-2">
-              <button
-                type="submit"
-                className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
-              >
-                {t('users.create')}
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowCreateForm(false)}
-                className="px-4 py-2 bg-gray-300 text-gray-700 rounded hover:bg-gray-400"
-              >
-                {t('users.cancel')}
-              </button>
-            </div>
-          </form>
-        </div>
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle className="text-lg">{t('users.createUser')}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleCreate} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-1">{t('users.username')}</label>
+                <Input
+                  type="text"
+                  value={createForm.username}
+                  onChange={(e) => setCreateForm({ ...createForm, username: e.target.value })}
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">{t('users.password')}</label>
+                <Input
+                  type="password"
+                  value={createForm.password}
+                  onChange={(e) => setCreateForm({ ...createForm, password: e.target.value })}
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">{t('users.role')}</label>
+                <select
+                  value={createForm.role}
+                  onChange={(e) => setCreateForm({ ...createForm, role: e.target.value })}
+                  className="w-full p-2 border rounded-md border-input bg-background text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <option value="employee">{t('role.employee')}</option>
+                  <option value="dept_admin">{t('role.deptAdmin')}</option>
+                  <option value="operator">{t('role.operator')}</option>
+                  <option value="auditor">{t('role.auditor')}</option>
+                  <option value="admin">{t('role.admin')}</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">{t('users.department')}</label>
+                <select
+                  value={createForm.department_id}
+                  onChange={(e) => setCreateForm({ ...createForm, department_id: e.target.value })}
+                  className="w-full p-2 border rounded-md border-input bg-background text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <option value="">{t('users.noDepartment')}</option>
+                  {departments.map(dept => (
+                    <option key={dept.id} value={dept.id}>{dept.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex gap-2 pt-2">
+                <Button type="submit" variant="primary">{t('users.create')}</Button>
+                <Button type="button" variant="secondary" onClick={() => setShowCreateForm(false)}>{t('users.cancel')}</Button>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
       )}
 
-      <div className="bg-white rounded-lg shadow">
-        <table className="w-full">
-          <thead className="bg-gray-50 border-b">
-            <tr>
-              <th className="px-6 py-3 text-left font-medium text-gray-700">{t('users.username')}</th>
-              <th className="px-6 py-3 text-left font-medium text-gray-700">{t('users.role')}</th>
-              <th className="px-6 py-3 text-left font-medium text-gray-700">{t('users.department')}</th>
-              <th className="px-6 py-3 text-left font-medium text-gray-700">{t('users.lastLogin')}</th>
-              <th className="px-6 py-3 text-left font-medium text-gray-700">{t('users.operations')}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {users.map((user) => (
-              <tr key={user.id} className="border-b hover:bg-gray-50">
-                <td className="px-6 py-4 font-medium">{user.username}</td>
-                <td className="px-6 py-4">
-                  <span className={`px-2 py-1 rounded text-sm ${getRoleColor(user.role)}`}>
-                    {getRoleName(user.role)}
-                  </span>
-                </td>
-                <td className="px-6 py-4 text-gray-600">
-                  {departments.find(d => d.id === user.department_id)?.name || '-'}
-                </td>
-                <td className="px-6 py-4 text-gray-600">{user.last_login || '-'}</td>
-                <td className="px-6 py-4">
-                  <button
-                    onClick={() => handleDelete(user.id, user.username)}
-                    className="text-red-600 hover:text-red-800"
-                    disabled={user.id === currentUser?.id}
-                  >
-                    {user.id === currentUser?.id ? t('users.cannotDeleteSelf') : t('users.delete')}
-                  </button>
-                </td>
-              </tr>
-            ))}
-            {users.length === 0 && (
-              <tr>
-                <td colSpan={5} className="px-6 py-8 text-center text-gray-500">
-                  {t('users.noUsers')}
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-    </div>
+      {/* Users Table */}
+      <Card>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="border-b border-border bg-muted/30">
+                <tr>
+                  <th className="text-left py-3 px-4 font-medium text-muted-foreground">{t('users.username')}</th>
+                  <th className="text-left py-3 px-4 font-medium text-muted-foreground">{t('users.role')}</th>
+                  <th className="text-left py-3 px-4 font-medium text-muted-foreground">{t('users.department')}</th>
+                  <th className="text-left py-3 px-4 font-medium text-muted-foreground">{t('users.lastLogin')}</th>
+                  <th className="text-left py-3 px-4 font-medium text-muted-foreground">{t('users.operations')}</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {users.map((user) => (
+                  <tr key={user.id} className="hover:bg-muted/30 transition-colors">
+                    <td className="py-3 px-4 font-medium">{user.username}</td>
+                    <td className="py-3 px-4">
+                      <RoleBadge role={user.role} />
+                      <span className="ml-2 text-sm text-muted-foreground">{getRoleName(user.role)}</span>
+                    </td>
+                    <td className="py-3 px-4 text-muted-foreground">
+                      {departments.find(d => d.id === user.department_id)?.name || '-'}
+                    </td>
+                    <td className="py-3 px-4 text-muted-foreground">{user.last_login || '-'}</td>
+                    <td className="py-3 px-4">
+                      <Button
+                        variant="ghost"
+                        className="text-error hover:text-error/80 h-auto p-0"
+                        onClick={() => handleDelete(user.id, user.username)}
+                        disabled={user.id === currentUser?.id}
+                      >
+                        {user.id === currentUser?.id ? t('users.cannotDeleteSelf') : t('users.delete')}
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+                {users.length === 0 && (
+                  <tr>
+                    <td colSpan={5} className="py-8 text-center text-muted-foreground">
+                      {t('users.noUsers')}
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+    </PageContainer>
   )
 }

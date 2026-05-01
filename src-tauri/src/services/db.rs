@@ -263,6 +263,19 @@ pub fn init_db() -> Result<Connection> {
         []
     )?;
     
+    // 创建模型价格表
+    conn.execute(
+        r#"
+        CREATE TABLE IF NOT EXISTS model_prices (
+            model_name TEXT PRIMARY KEY,
+            input_price REAL NOT NULL,
+            output_price REAL NOT NULL,
+            updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        )
+        "#,
+        []
+    )?;
+
     // 更新 users 表，添加 department_id 字段（主部门）
     // 注意：SQLite 添加列需要特殊处理
     conn.execute(
@@ -989,4 +1002,30 @@ pub fn get_user_accessible_departments(conn: &Connection, user_id: &str, user_ro
         dept_ids.push(row?);
     }
     Ok(dept_ids)
+}
+
+/// 更新模型价格（UPSERT）
+pub fn upsert_model_price(conn: &Connection, model_name: &str, input_price: f64, output_price: f64) -> Result<()> {
+    conn.execute(
+        r#"
+        INSERT INTO model_prices (model_name, input_price, output_price, updated_at)
+        VALUES (?1, ?2, ?3, datetime('now'))
+        ON CONFLICT(model_name) DO UPDATE SET
+            input_price = excluded.input_price,
+            output_price = excluded.output_price,
+            updated_at = datetime('now')
+        "#,
+        rusqlite::params![model_name, input_price, output_price],
+    )?;
+    Ok(())
+}
+
+/// 切换 Skill 的启用状态
+pub fn toggle_skill_enabled(conn: &Connection, skill_id: &str, enabled: bool) -> Result<()> {
+    let enabled_int = if enabled { 1 } else { 0 };
+    conn.execute(
+        "UPDATE skills_installed SET enabled = ?1 WHERE skill_id = ?2",
+        rusqlite::params![enabled_int, skill_id],
+    )?;
+    Ok(())
 }

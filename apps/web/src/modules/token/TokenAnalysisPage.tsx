@@ -6,21 +6,21 @@ import * as deptApi from '../departments/api'
 import type { Department } from '../departments/types'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { DollarSign, TrendingUp, Clock, Filter, Download, BarChart3, PieChart, BarChart2, Calendar, Users, History } from 'lucide-react'
+import { DollarSign, TrendingUp, Clock, Filter, Download, BarChart3, PieChart, BarChart2, History } from 'lucide-react'
 
-interface TokenUsage {
+interface TokenUsageRecord {
   id: string
   instance_id: string
-  instance_name: string
-  reported_at: string
+  instance_name: string | null
   model: string
   prompt_tokens: number
   completion_tokens: number
   total_tokens: number
   cost: number
-  department_id?: string
-  department_name?: string
+  reported_at: string
+  department_name?: string | null
 }
+
 
 interface DailyStats {
   date: string
@@ -65,10 +65,10 @@ const CHART_COLORS = {
 }
 
 export default function TokenAnalysisPage() {
-  const { t, language } = useLanguageStore()
+  const { t } = useLanguageStore()
   const { getToken } = useAuthStore()
   const [loading, setLoading] = useState(true)
-  const [usage, setUsage] = useState<TokenUsage[]>([])
+  const [usageRecords, setUsageRecords] = useState<TokenUsageRecord[]>([])
   const [dailyStats, setDailyStats] = useState<DailyStats[]>([])
   const [departmentStats, setDepartmentStats] = useState<DepartmentStats[]>([])
   const [departments, setDepartments] = useState<Department[]>([])
@@ -89,45 +89,11 @@ export default function TokenAnalysisPage() {
     try {
       setLoading(true)
 
-      // 调用 /usage/current 获取真实用量数据
+      // 1. 获取聚合数据（用于顶部卡片和图表）
       const usageRes = await usageAPI.getCurrentUsage()
-      const data = (usageRes as any)
+      const stats = (usageRes as any)?.data
 
-      if (data.success && data.data) {
-        const stats = data.data
-
-        // 构建使用记录（按厂商拆分）
-        const usageRecords: TokenUsage[] = (stats.by_provider || []).map((p: any, i: number) => ({
-          id: `provider-${i}`,
-          instance_id: '',
-          instance_name: p.provider_name || p.provider,
-          reported_at: new Date().toISOString().replace('T', ' ').slice(0, 19),
-          model: p.provider,
-          prompt_tokens: Math.round(p.tokens * 0.6),
-          completion_tokens: Math.round(p.tokens * 0.4),
-          total_tokens: p.tokens,
-          cost: p.cost,
-          department_id: undefined,
-          department_name: undefined,
-        }))
-
-        // 添加部门记录
-        const deptRecords: TokenUsage[] = (stats.by_department || []).map((d: any, i: number) => ({
-          id: `dept-${i}`,
-          instance_id: '',
-          instance_name: d.department_name || d.department,
-          reported_at: new Date().toISOString().replace('T', ' ').slice(0, 19),
-          model: 'aggregate',
-          prompt_tokens: Math.round(d.tokens * 0.6),
-          completion_tokens: Math.round(d.tokens * 0.4),
-          total_tokens: d.tokens,
-          cost: d.cost,
-          department_id: d.department,
-          department_name: d.department_name,
-        }))
-
-        setUsage([...usageRecords, ...deptRecords])
-
+      if (stats) {
         // 每日统计（聚合显示）
         const today = new Date().toISOString().slice(5, 10)
         setDailyStats([{
@@ -140,22 +106,32 @@ export default function TokenAnalysisPage() {
         // 部门统计
         setDepartmentStats((stats.by_department || []).map((d: any) => ({
           department_id: d.department,
-          department_name: d.department_name,
+          department_name: d.department_name || '未分配部门',
           total_tokens: d.tokens,
           total_cost: d.cost,
           request_count: 0,
           instance_count: 0,
         })))
       }
+
+      // 2. 获取真实使用记录列表
+      const recordsRes = await usageAPI.getTokenUsageList()
+      const recordsData = recordsRes as any
+
+      if (recordsData.success && Array.isArray(recordsData.data)) {
+        setUsageRecords(recordsData.data as TokenUsageRecord[])
+      } else {
+        setUsageRecords([])
+      }
     } catch (error) {
       console.error('加载 Token 数据失败:', error)
-      setUsage([])
+      setUsageRecords([])
       setDailyStats([])
       setDepartmentStats([])
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [getToken])
 
   useEffect(() => {
     loadTokenData()
@@ -179,6 +155,19 @@ export default function TokenAnalysisPage() {
     if (model.includes('gpt-3.5')) return 'GPT-3.5'
     if (model.includes('claude')) return 'Claude'
     return model
+  }
+
+  function formatLocalTime(utcStr: string): string {
+    try {
+      const d = new Date(utcStr)
+      return d.toLocaleString('zh-CN', {
+        year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', second: '2-digit',
+        hour12: false,
+      })
+    } catch {
+      return utcStr
+    }
   }
 
   // Export data function
@@ -496,10 +485,10 @@ export default function TokenAnalysisPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-              {usage.map((record) => (
+              {usageRecords.map((record) => (
                 <tr key={record.id} className="hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
-                  <td className="px-6 py-4 text-sm text-foreground">{record.reported_at || record.timestamp}</td>
-                  <td className="px-6 py-4 font-medium text-foreground">{record.instance_name}</td>
+                  <td className="px-6 py-4 text-sm text-foreground">{formatLocalTime(record.reported_at)}</td>
+                  <td className="px-6 py-4 font-medium text-foreground">{record.instance_name || '未分配'}</td>
                   <td className="px-6 py-4">
                     <span className="text-sm">
                       {getModelIcon(record.model)} {record.model}
@@ -513,7 +502,7 @@ export default function TokenAnalysisPage() {
                   </td>
                 </tr>
               ))}
-              {usage.length === 0 && (
+              {usageRecords.length === 0 && (
                 <tr>
                   <td colSpan={7} className="px-6 py-8 text-center text-muted-foreground">
                     {t('token.noRecords')}
@@ -536,12 +525,7 @@ export default function TokenAnalysisPage() {
               <span className="font-medium">ℹ️ {t('token.tip')}</span>
               {t('token.tipText')}
             </p>
-            {usage.length > 0 && usage.every(u => u.id.startsWith('test-') || (u.instance_name && u.instance_name.toLowerCase().includes('test'))) && (
-              <p className="text-sm text-amber-700 dark:text-amber-300 mt-2 font-medium">
-                ⚠️ {t('token.testDataWarning')}
-              </p>
-            )}
-            {usage.length === 0 && dailyStats.length === 0 && (
+            {usageRecords.length === 0 && dailyStats.length === 0 && (
               <p className="text-sm text-amber-700 dark:text-amber-300 mt-2 font-medium">
                 {t('token.noRealData')}
               </p>

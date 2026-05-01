@@ -4,14 +4,12 @@ import { useLanguageStore } from '../../stores/languageStore'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { instancesAPI, usageAPI } from '../../services/api'
-import { 
-  Activity, 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  AlertCircle, 
-  Bell, 
-  Settings, 
-  Users, 
-  DollarSign, 
+import {
+  Activity,
+  Bell,
+  Settings,
+  Users,
+  DollarSign,
   TrendingUp,
   Server,
   Clock,
@@ -31,14 +29,6 @@ interface AlertItem {
   timestamp: string
   message: string
   severity: 'critical' | 'warning' | 'info'
-}
-
-interface Instance {
-  id: string
-  name: string
-  endpoint: string
-  status: string
-  version?: string
 }
 
 // 实时用量监控接口
@@ -75,7 +65,6 @@ interface UsageQuotaConfig {
 
 export default function DashboardPage() {
   const { user } = useAuthStore()
-  const { getToken } = useAuthStore()
   const { t } = useLanguageStore()
   const [loading, setLoading] = useState(true)
   const [stats, setStats] = useState<InstanceStats>({
@@ -457,7 +446,7 @@ export default function DashboardPage() {
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {usageStats.by_department.slice(0, 6).map((dept) => (
-                <div key={dept.department} className="p-4 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
+                <div key={dept.department} className="p-4 bg-muted/50 rounded-lg">
                   <div className="flex justify-between items-center mb-2">
                     <span className="font-medium text-foreground">{dept.department_name || dept.department}</span>
                     <span className="text-sm font-bold text-success">${dept.cost.toFixed(2)}</span>
@@ -465,7 +454,7 @@ export default function DashboardPage() {
                   <div className="text-sm text-muted-foreground">
                     {dept.tokens.toLocaleString()} tokens
                   </div>
-                  <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5 mt-2">
+                  <div className="w-full bg-muted rounded-full h-1.5 mt-2">
                     <div
                       className="bg-primary h-1.5 rounded-full transition-all"
                       style={{ width: `${Math.min((dept.tokens / Math.max(usageStats.total_tokens, 1)) * 100, 100)}%` }}
@@ -560,7 +549,7 @@ export default function DashboardPage() {
                       {quotaConfig.usage_percent.toFixed(1)}%
                     </span>
                   </div>
-                  <div className="w-full bg-gray-100 rounded-full h-3 overflow-hidden">
+                  <div className="w-full bg-muted rounded-full h-3 overflow-hidden">
                     <div 
                       className={`h-3 rounded-full transition-all duration-500 ${
                         quotaConfig.usage_percent >= quotaConfig.warning_threshold * 100 
@@ -579,15 +568,15 @@ export default function DashboardPage() {
                 </div>
                 
                 <div className="grid grid-cols-3 gap-3">
-                  <div className="p-3 bg-gray-50 rounded-lg text-center">
+                  <div className="p-3 bg-muted rounded-lg text-center">
                     <p className="text-xs text-muted-foreground mb-1">{t('dashboard.totalBudget')}</p>
                     <p className="text-lg font-bold text-foreground">${quotaConfig.monthly_quota}</p>
                   </div>
-                  <div className="p-3 bg-gray-50 rounded-lg text-center">
+                  <div className="p-3 bg-muted rounded-lg text-center">
                     <p className="text-xs text-muted-foreground mb-1">{t('dashboard.used')}</p>
                     <p className="text-lg font-bold text-foreground">${quotaConfig.current_usage.toFixed(2)}</p>
                   </div>
-                  <div className="p-3 bg-gray-50 rounded-lg text-center">
+                  <div className="p-3 bg-muted rounded-lg text-center">
                     <p className="text-xs text-muted-foreground mb-1">{t('dashboard.remaining')}</p>
                     <p className={`text-lg font-bold ${quotaConfig.remaining < 100 ? 'text-error' : 'text-success'}`}>
                       ${quotaConfig.remaining.toFixed(2)}
@@ -615,7 +604,7 @@ export default function DashboardPage() {
                 <span className="text-sm font-medium text-foreground">{t('dashboard.overallHealth')}</span>
                 <span className="text-sm font-bold text-success">95%</span>
               </div>
-              <div className="w-full bg-gray-100 rounded-full h-3">
+              <div className="w-full bg-muted rounded-full h-3">
                 <div
                   className="bg-success h-3 rounded-full transition-all duration-500"
                   style={{ width: '95%' }}
@@ -624,21 +613,21 @@ export default function DashboardPage() {
             </div>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="text-center p-6 bg-gradient-to-br from-gray-50 to-white rounded-xl">
+            <div className="text-center p-6 bg-gradient-to-br from-muted/50 to-background rounded-xl">
               <div className="flex justify-center mb-2">
                 <CheckCircle className="w-8 h-8 text-success" />
               </div>
               <p className="text-3xl font-bold text-foreground mb-1">99.9%</p>
               <p className="text-sm text-muted-foreground">{t('dashboard.availability')}</p>
             </div>
-            <div className="text-center p-6 bg-gradient-to-br from-gray-50 to-white rounded-xl">
+            <div className="text-center p-6 bg-gradient-to-br from-muted/50 to-background rounded-xl">
               <div className="flex justify-center mb-2">
                 <Activity className="w-8 h-8 text-primary" />
               </div>
               <p className="text-3xl font-bold text-foreground mb-1">45ms</p>
               <p className="text-sm text-muted-foreground">{t('dashboard.responseTime')}</p>
             </div>
-            <div className="text-center p-6 bg-gradient-to-br from-gray-50 to-white rounded-xl">
+            <div className="text-center p-6 bg-gradient-to-br from-muted/50 to-background rounded-xl">
               <div className="flex justify-center mb-2">
                 <Bell className="w-8 h-8 text-warning" />
               </div>

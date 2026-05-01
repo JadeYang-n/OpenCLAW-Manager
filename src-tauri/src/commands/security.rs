@@ -117,42 +117,130 @@ pub fn security_check() -> SecurityReport {
 #[tauri::command]
 pub fn security_remediate() -> Result<String, String> {
     let conn = db::get_connection().map_err(|e| e.to_string())?;
-    
+
+    let mut actions = Vec::new();
+
     // 检查 API Key 是否配置
     let has_api_keys = conn
         .prepare("SELECT COUNT(*) FROM api_keys")
         .ok()
         .and_then(|mut stmt| stmt.query_row([], |r| r.get(0)).ok())
         .unwrap_or(0) > 0;
-    
+
     if !has_api_keys {
-        return Err("请先配置 API Key 再执行加固".to_string());
+        return Err("无法执行加固：请先配置至少一个 API Key".to_string());
     }
-    
-    Ok("安全加固已完成！".to_string())
+
+    // 检查默认密码：admin 账户是否存在
+    let has_default_password: bool = conn
+        .prepare("SELECT COUNT(*) FROM users WHERE username = 'admin'")
+        .ok()
+        .and_then(|mut stmt| {
+            let count: i64 = stmt.query_row([], |r| r.get(0)).ok()?;
+            Some(count > 0)
+        })
+        .unwrap_or(false);
+
+    if has_default_password {
+        actions.push("⚠️ 检测到 admin 账户存在默认密码，建议立即修改".to_string());
+    }
+
+    // 检查是否有禁用的审计日志
+    let audit_log_enabled: bool = conn
+        .prepare("SELECT COUNT(*) FROM config WHERE key = 'audit_log_enabled' AND value = 'true'")
+        .ok()
+        .and_then(|mut stmt| stmt.query_row([], |r| r.get(0)).ok())
+        .unwrap_or(false);
+
+    if !audit_log_enabled {
+        let _ = conn.execute(
+            "INSERT OR REPLACE INTO config (key, value) VALUES ('audit_log_enabled', 'true')",
+            [],
+        );
+        actions.push("✅ 已启用审计日志功能".to_string());
+    }
+
+    if actions.is_empty() {
+        actions.push("✅ 安全检查通过，无需加固".to_string());
+    }
+
+    Ok(actions.join("\n"))
 }
 
-#[allow(dead_code, unused_variables)]
 #[tauri::command]
-pub fn scan_skills(_path: String) -> SkillsScanReport {
-    // Skills 扫描功能
-    SkillsScanReport {
-        skills: vec![
-            SkillScanResult {
-                name: "文件操作".to_string(),
-                version: "1.0.0".to_string(),
-                risk: "低".to_string(),
-                issues: vec![],
-            },
-            SkillScanResult {
-                name: "浏览器自动化".to_string(),
-                version: "1.1.0".to_string(),
-                risk: "中".to_string(),
-                issues: vec!["网络请求权限".to_string()],
-            },
-        ],
-        total_risk: "低".to_string(),
+pub fn scan_skills(path: String) -> SkillsScanReport {
+    let scan_path = if path.is_empty() {
+        dirs::data_local_dir()
+            .map(|d| d.join("OpenCLAW").join("skills"))
+            .unwrap_or_default()
+    } else {
+        std::path::PathBuf::from(&path)
+    };
+
+    let mut skills = Vec::new();
+    let mut total_risk = "无".to_string();
+
+    if scan_path.exists() && scan_path.is_dir() {
+        if let Ok(entries) = std::fs::read_dir(&scan_path) {
+            for entry in entries.flatten() {
+                let name = entry.file_name().to_string_lossy().to_string();
+                let version = read_skill_version(&entry.path()).unwrap_or_else(|| "unknown".to_string());
+                let (risk, issues) = analyze_skill_risk(&entry.path(), &name);
+                if risk != "无" && (total_risk == "无" || total_risk == "低") {
+                    total_risk = risk.clone();
+                }
+                skills.push(SkillScanResult { name, version, risk, issues });
+            }
+        }
     }
+
+    if skills.is_empty() {
+        skills.push(SkillScanResult {
+            name: "(目录为空)".to_string(),
+            version: "N/A".to_string(),
+            risk: "无".to_string(),
+            issues: vec![],
+        });
+    }
+
+    SkillsScanReport { skills, total_risk }
+}
+
+fn read_skill_version(path: &std::path::Path) -> Option<String> {
+    ["package.json", "skill.json", "metadata.json"].iter()
+        .find(|f| path.join(f).exists())
+        .and_then(|f| std::fs::read_to_string(path.join(f)).ok())
+        .and_then(|content| serde_json::from_str::<serde_json::Value>(&content).ok())
+        .and_then(|v| v.get("version").and_then(|v| v.as_str()).map(|s| s.to_string()))
+}
+
+fn analyze_skill_risk(path: &std::path::Path, _name: &str) -> (String, Vec<String>) {
+    let mut issues = Vec::new();
+    let mut risk = "低".to_string();
+
+    if let Ok(content) = std::fs::read_to_string(path.join("skill.md"))
+        .or_else(|_| std::fs::read_to_string(path.join("README.md")))
+    {
+        let lower = content.to_lowercase();
+        if lower.contains("fs.") || lower.contains("filesystem") {
+            issues.push("文件系统访问权限".to_string());
+            risk = "中".to_string();
+        }
+        if lower.contains("fetch(") || lower.contains("http") || lower.contains("curl") {
+            issues.push("网络请求权限".to_string());
+            risk = "中".to_string();
+        }
+        if lower.contains("exec(") || lower.contains("spawn") || lower.contains("shell") {
+            issues.push("命令执行权限".to_string());
+            risk = "高".to_string();
+        }
+    }
+
+    if issues.is_empty() {
+        risk = "无".to_string();
+    }
+
+    (risk, issues)
 }
 
 // ==================== 端口扫描服务 ====================

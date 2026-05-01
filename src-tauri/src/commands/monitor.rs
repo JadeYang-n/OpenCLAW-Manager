@@ -234,7 +234,20 @@ pub fn set_budget_limit(daily: f64, monthly: f64) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn update_model_prices(_prices: HashMap<String, ModelPrice>) -> Result<(), String> {
-    // 模拟更新模型价格
+pub fn update_model_prices(token: String, prices: HashMap<String, ModelPrice>) -> Result<(), String> {
+    let conn = db::get_connection().map_err(|e| e.to_string())?;
+    let user = auth::verify_token(&token, &conn)?;
+    auth::check_permission(&user.role, &["admin", "operator"], "monitor", "update_prices")?;
+
+    for (model, price) in &prices {
+        db::upsert_model_price(&conn, model, price.input, price.output)
+            .map_err(|e| format!("更新模型 {} 价格失败：{}", model, e))?;
+    }
+
+    auth::log_audit_operation(
+        &conn, &user, "monitor", "update_model_prices", "M", "success",
+        Some(&format!("{{\"count\": {}}}", prices.len())),
+    );
+
     Ok(())
 }

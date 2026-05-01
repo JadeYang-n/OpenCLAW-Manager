@@ -33,9 +33,9 @@ pub struct UpdateSkillRequest {
 pub struct CreateSkillRequest {
     pub name: String,
     pub description: Option<String>,
-    pub code: String,  // Skill 的实际代码(加密存储)
-    pub visibility: String,  // "all" 或 "selected_roles"
-    pub allowed_roles: Vec<String>,  // 如果 visibility="selected_roles"
+    pub code: String,
+    pub visibility: String,
+    pub allowed_roles: Vec<String>,
 }
 
 /// 获取 Skills 目录
@@ -44,10 +44,10 @@ fn get_skills_directory() -> Result<PathBuf, String> {
         .ok_or("无法获取应用数据目录")?
         .join("OpenCLAW")
         .join("skills");
-    
+
     fs::create_dir_all(&app_data)
         .map_err(|e| format!("创建 Skills 目录失败：{}", e))?;
-    
+
     Ok(app_data)
 }
 
@@ -102,36 +102,29 @@ fn get_anthropic_skills() -> Vec<SkillInfo> {
 pub fn list_skills(token: String) -> Result<Vec<SkillInfo>, String> {
     let conn = db::get_connection().map_err(|e| e.to_string())?;
     let user = auth::verify_token(&token, &conn)?;
-    
-    // 获取已安装的 Skills
+
     let installed_skills = db::get_installed_skills(&conn)
         .map_err(|e| e.to_string())?;
-    
-    // 扫描本地 Skills（已废弃，使用空列表）
+
     #[allow(deprecated)]
     let local_skills = scan_local_skills().unwrap_or_default();
-    
-    // 获取 Anthropic 官方 Skills
+
     let anthropic_skills = get_anthropic_skills();
-    
-    // 合并所有 Skills
+
     let mut all_skills: Vec<SkillInfo> = Vec::new();
-    
-    // 添加本地 Skills
+
     for mut skill in local_skills {
         skill.installed = installed_skills.iter().any(|s| s == &skill.id);
         skill.enabled = skill.installed;
         all_skills.push(skill);
     }
-    
-    // 添加 Anthropic Skills
+
     for mut skill in anthropic_skills {
         skill.installed = installed_skills.iter().any(|s| s == &skill.id);
         skill.enabled = skill.installed;
         all_skills.push(skill);
     }
-    
-    // 获取用户可见的 Skill Assets（基于权限）
+
     let visible_skills = match db::get_visible_skills(&conn, &user.user_id, &user.role) {
         Ok(skills) => skills,
         Err(e) => {
@@ -139,30 +132,27 @@ pub fn list_skills(token: String) -> Result<Vec<SkillInfo>, String> {
             Vec::new()
         }
     };
-    
-    // 将 Skill Assets 转换为 SkillInfo 格式
+
     for skill_asset in visible_skills {
         let skill_id = skill_asset.get("skill_id").and_then(|v| v.as_str()).unwrap_or("");
         let name = skill_asset.get("name").and_then(|v| v.as_str()).unwrap_or("");
         let version = skill_asset.get("version").and_then(|v| v.as_str()).unwrap_or("1.0.0");
         let description = skill_asset.get("description").and_then(|v| v.as_str());
-        
-        // 检查是否已安装
+
         let is_installed = installed_skills.iter().any(|s| s == &skill_id);
-        
+
         all_skills.push(SkillInfo {
             id: skill_id.to_string(),
             name: name.to_string(),
             description: description.map(|s| s.to_string()),
             version: version.to_string(),
-            author: Some("custom".to_string()), // 标记为自定义 Skill
+            author: Some("custom".to_string()),
             installed: is_installed,
             enabled: is_installed,
             source: "custom".to_string(),
         });
     }
-    
-    // 按 source 排序：skill-creator 排第一，然后是 local，最后是 anthropic 和 custom
+
     all_skills.sort_by(|a, b| {
         if a.id == "skill-creator" {
             std::cmp::Ordering::Less
@@ -172,7 +162,7 @@ pub fn list_skills(token: String) -> Result<Vec<SkillInfo>, String> {
             a.source.cmp(&b.source)
         }
     });
-    
+
     Ok(all_skills)
 }
 
@@ -182,47 +172,131 @@ pub fn install_skill(token: String, req: InstallSkillRequest) -> Result<String, 
     let conn = db::get_connection().map_err(|e| e.to_string())?;
     let user = auth::verify_token(&token, &conn)?;
     auth::check_permission(&user.role, &["admin", "operator"], "skill", "install")?;
-    
+
     let source = req.source.as_deref().unwrap_or("local");
-    
+
     match source {
         "anthropic" => {
-            // 从 Anthropic 仓库克隆
             eprintln!("[Skill 安装] 从 Anthropic 仓库安装：{}", req.skill_id);
-            // TODO: 实现 git clone https://github.com/anthropics/skills.git
-            // 目前仅提示用户手动下载
-            Ok(format!("📥 请从 https://github.com/anthropics/skills 下载 {} 到本地 Skills 目录，然后重新刷新列表", req.skill_id))
+            let skills_dir = get_skills_directory()?;
+            let target_path = skills_dir.join(&req.skill_id);
+
+            if target_path.exists() {
+                return Err(format!("Skill {} 已存在，请先卸载再安装", req.skill_id));
+            }
+
+            // 尝试 git clone
+            let clone_result = std::process::Command::new("git")
+                .args(["clone", "--depth", "1",
+                    &format!("https://github.com/anthropics/skills/{}", req.skill_id),
+                    target_path.to_str().unwrap()])
+                .output();
+
+            match clone_result {
+                Ok(output) if output.status.success() => {
+                    eprintln!("[Skill 安装] git clone 成功：{}", req.skill_id);
+                },
+                _ => {
+                    eprintln!("[Skill 安装] git clone 失败，尝试 HTTP 下载：{}", req.skill_id);
+                    download_skill_from_github(&req.skill_id, &target_path)?;
+                }
+            }
+
+            db::install_skill(&conn, &req.skill_id, req.version.as_deref().unwrap_or("latest"))
+                .map_err(|e| format!("数据库更新失败：{}", e))?;
+
+            auth::log_audit_operation(
+                &conn, &user, "skill", "install", "M", "success",
+                Some(&format!("{{\"skill_id\": \"{}\", \"source\": \"anthropic\"}}", req.skill_id)),
+            );
+
+            Ok(format!("✅ Skill {} installed successfully (from anthropic)", req.skill_id))
         },
         "clawhub" => {
             Ok("🌐 ClawHub API 尚未开放。请访问 https://clawhub.com 获取 Skills 和安装说明".to_string())
         },
         _ => {
-            // 本地安装
             let skills_dir = get_skills_directory()?;
             let skill_path = skills_dir.join(&req.skill_id);
-            
+
             if !skill_path.exists() {
                 return Err(format!("本地未找到 Skill: {}. 请先下载到 {}", req.skill_id, skills_dir.display()));
             }
-            
-            // 在数据库中标记为已安装
+
             db::install_skill(&conn, &req.skill_id, req.version.as_deref().unwrap_or("latest"))
                 .map_err(|e| format!("数据库更新失败：{}", e))?;
-            
-            // 记录审计日志
+
             auth::log_audit_operation(
-                &conn,
-                &user,
-                "skill",
-                "install",
-                "M",
-                "success",
+                &conn, &user, "skill", "install", "M", "success",
                 Some(&format!("{{\"skill_id\": \"{}\", \"source\": \"{}\"}}", req.skill_id, source)),
             );
-            
+
             Ok(format!("✅ Skill {} installed successfully (from {})", req.skill_id, source))
         }
     }
+}
+
+/// 从 GitHub 下载 Skill（zip 归档解压）
+fn download_skill_from_github(skill_id: &str, target_path: &std::path::Path) -> Result<(), String> {
+    let zip_url = "https://github.com/anthropics/skills/archive/refs/heads/main.zip";
+
+    let client = reqwest::blocking::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+        .map_err(|e| format!("创建 HTTP 客户端失败：{}", e))?;
+
+    let response = client.get(zip_url)
+        .send()
+        .map_err(|e| format!("下载 Skill 仓库失败：{}", e))?;
+
+    if !response.status().is_success() {
+        return Err(format!("GitHub 返回错误状态：{}", response.status()));
+    }
+
+    let zip_bytes = response.bytes()
+        .map_err(|e| format!("读取响应失败：{}", e))?;
+
+    let temp_dir = std::env::temp_dir().join(format!("skill_{}", skill_id));
+    let _ = std::fs::remove_dir_all(&temp_dir);
+    std::fs::create_dir_all(&temp_dir)
+        .map_err(|e| format!("创建临时目录失败：{}", e))?;
+
+    let cursor = std::io::Cursor::new(zip_bytes);
+    let mut archive = zip::ZipArchive::new(cursor)
+        .map_err(|e| format!("解压失败：{}", e))?;
+    archive.extract(&temp_dir)
+        .map_err(|e| format!("解压失败：{}", e))?;
+
+    // 查找 skill 目录
+    let extracted_skill = temp_dir.join(format!("skills-main/{}", skill_id));
+    if extracted_skill.exists() {
+        copy_dir_all(&extracted_skill, target_path)?;
+    } else {
+        let alt_path = temp_dir.join(format!("skills-main/skills/{}", skill_id));
+        if alt_path.exists() {
+            copy_dir_all(&alt_path, target_path)?;
+        } else {
+            return Err(format!("在下载的仓库中未找到 Skill: {}", skill_id));
+        }
+    }
+
+    let _ = std::fs::remove_dir_all(&temp_dir);
+    Ok(())
+}
+
+fn copy_dir_all(src: &std::path::Path, dst: &std::path::Path) -> Result<(), String> {
+    std::fs::create_dir_all(dst).map_err(|e| format!("创建目录失败：{}", e))?;
+    for entry in std::fs::read_dir(src).map_err(|e| format!("读取目录失败：{}", e))? {
+        let entry = entry.map_err(|e| format!("读取条目失败：{}", e))?;
+        let ty = entry.file_type().map_err(|e| format!("获取类型失败：{}", e))?;
+        if ty.is_dir() {
+            copy_dir_all(&entry.path(), &dst.join(entry.file_name()))?;
+        } else {
+            std::fs::copy(entry.path(), dst.join(entry.file_name()))
+                .map_err(|e| format!("复制文件失败：{}", e))?;
+        }
+    }
+    Ok(())
 }
 
 /// 卸载 Skill
@@ -231,43 +305,57 @@ pub fn uninstall_skill(token: String, skill_id: String) -> Result<String, String
     let conn = db::get_connection().map_err(|e| e.to_string())?;
     let user = auth::verify_token(&token, &conn)?;
     auth::check_permission(&user.role, &["admin", "operator"], "skill", "uninstall")?;
-    
-    // 从数据库删除记录
+
     db::uninstall_skill(&conn, &skill_id)
         .map_err(|e| format!("数据库删除失败：{}", e))?;
-    
-    // 记录审计日志
+
+    // 同时删除本地文件
+    let skills_dir = get_skills_directory()?;
+    let skill_path = skills_dir.join(&skill_id);
+    if skill_path.exists() {
+        let _ = std::fs::remove_dir_all(&skill_path);
+    }
+
     auth::log_audit_operation(
-        &conn,
-        &user,
-        "skill",
-        "uninstall",
-        "M",
-        "success",
+        &conn, &user, "skill", "uninstall", "M", "success",
         Some(&format!("{{\"skill_id\": \"{}\"}}", skill_id)),
     );
-    
+
     Ok(format!("✅ Skill {} uninstalled successfully", skill_id))
 }
 
-/// 更新 Skill
+/// 更新 Skill — 从 Anthropic 仓库重新下载（如果是官方 Skill）
 #[tauri::command]
-pub fn update_skill(token: String, req: UpdateSkillRequest) -> Result<(), String> {
+pub fn update_skill(token: String, req: UpdateSkillRequest) -> Result<String, String> {
     let conn = db::get_connection().map_err(|e| e.to_string())?;
     let user = auth::verify_token(&token, &conn)?;
     auth::check_permission(&user.role, &["admin", "operator"], "skill", "update")?;
-    
-    auth::log_audit_operation(
-        &conn,
-        &user,
-        "skill",
-        "update",
-        "M",
-        "success",
-        Some(&format!("{{\"skill_id\": \"{}\"}}", req.skill_id)),
-    );
-    
-    Ok(())
+
+    let anthropic_skills = get_anthropic_skills();
+    let is_anthropic = anthropic_skills.iter().any(|s| s.id == req.skill_id);
+
+    if is_anthropic {
+        let skills_dir = get_skills_directory()?;
+        let target_path = skills_dir.join(&req.skill_id);
+
+        // 删除旧版本
+        if target_path.exists() {
+            std::fs::remove_dir_all(&target_path)
+                .map_err(|e| format!("删除旧版本失败：{}", e))?;
+        }
+
+        // 重新下载
+        download_skill_from_github(&req.skill_id, &target_path)?;
+
+        auth::log_audit_operation(
+            &conn, &user, "skill", "update", "M", "success",
+            Some(&format!("{{\"skill_id\": \"{}\"}}", req.skill_id)),
+        );
+
+        Ok(format!("✅ Skill {} 已更新到最新版本", req.skill_id))
+    } else {
+        Ok(format!("Skill {} 为自定义/本地 Skill，请手动更新文件后刷新列表", req.skill_id))
+    }
 }
 
 /// 启用/禁用 Skill
@@ -276,17 +364,15 @@ pub fn toggle_skill(token: String, skill_id: String, enabled: bool) -> Result<()
     let conn = db::get_connection().map_err(|e| e.to_string())?;
     let user = auth::verify_token(&token, &conn)?;
     auth::check_permission(&user.role, &["admin", "operator"], "skill", "toggle")?;
-    
+
+    db::toggle_skill_enabled(&conn, &skill_id, enabled)
+        .map_err(|e| format!("更新 Skill 状态失败：{}", e))?;
+
     auth::log_audit_operation(
-        &conn,
-        &user,
-        "skill",
-        "toggle",
-        "L",
-        "success",
+        &conn, &user, "skill", "toggle", "L", "success",
         Some(&format!("{{\"skill_id\": \"{}\", \"enabled\": {}}}", skill_id, enabled)),
     );
-    
+
     Ok(())
 }
 

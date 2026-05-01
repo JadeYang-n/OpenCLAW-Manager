@@ -2,6 +2,9 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../../stores/authStore'
 import { api } from '../../lib/api'
+import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/form'
 
 interface LoginResponse {
   token: string
@@ -20,7 +23,6 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
-  // If already logged in, redirect to dashboard
   useEffect(() => {
     if (isAuthenticated) {
       navigate('/instances', { replace: true })
@@ -44,14 +46,11 @@ export default function LoginPage() {
 
       const result = response.data
 
-      // 使用 Zustand store 的 login 方法（会自动 persist）
       useAuthStore.getState().login(result.user, result.token)
 
-      // 额外存储到 localStorage（双重保险）
       localStorage.setItem('auth_token', result.token)
       localStorage.setItem('auth_user', JSON.stringify(result.user))
-      
-      // 强制刷新一下 store 状态
+
       setTimeout(() => {
         navigate('/instances', { replace: true })
       }, 100)
@@ -64,68 +63,67 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <div className="max-w-md w-full">
+    <div className="min-h-screen flex items-center justify-center bg-background">
+      <div className="max-w-md w-full px-4">
         {/* Logo 和标题 */}
         <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-gray-900 mb-2">
+          <h1 className="text-4xl font-bold text-foreground mb-2">
             OpenCLAW Manager
           </h1>
-          <p className="text-gray-600">企业版 v4.0</p>
+          <p className="text-muted-foreground">多实例企业级管控平台 v1.0.0 Beta</p>
         </div>
 
         {/* 登录表单 */}
-        <div className="bg-white p-8 rounded-lg shadow-lg border">
-          <h2 className="text-2xl font-bold mb-6 text-center">用户登录</h2>
+        <Card className="shadow-elegant">
+          <CardHeader>
+            <CardTitle className="text-center text-xl">用户登录</CardTitle>
+            <CardDescription className="text-center">请输入您的账号和密码</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {error && (
+              <div className="bg-error/10 text-error p-4 rounded-lg mb-6 text-sm">
+                {error}
+              </div>
+            )}
 
-          {error && (
-            <div className="bg-red-100 text-red-800 p-4 rounded-md mb-6">
-              {error}
-            </div>
-          )}
+            <form onSubmit={handleLogin} className="space-y-6">
+              <div>
+                <label className="block text-sm font-medium mb-2">用户名</label>
+                <Input
+                  type="text"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  placeholder="请输入用户名"
+                  required
+                  autoFocus
+                />
+              </div>
 
-          <form onSubmit={handleLogin} className="space-y-6">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                用户名
-              </label>
-              <input
-                type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="请输入用户名"
-                required
-                autoFocus
-              />
-            </div>
+              <div>
+                <label className="block text-sm font-medium mb-2">密码</label>
+                <Input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="请输入密码"
+                  required
+                />
+              </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                密码
-              </label>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="请输入密码"
-                required
-              />
-            </div>
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {loading ? '登录中...' : '登录'}
-            </button>
-          </form>
-        </div>
+              <Button
+                type="submit"
+                disabled={loading}
+                variant="primary"
+                className="w-full"
+              >
+                {loading ? '登录中...' : '登录'}
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
 
         {/* 底部信息 */}
-        <div className="text-center mt-8 text-sm text-gray-600">
+        <div className="text-center mt-8 text-sm text-muted-foreground">
           <p>MIT License • 完全免费开源</p>
         </div>
       </div>

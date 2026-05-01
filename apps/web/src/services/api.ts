@@ -220,6 +220,9 @@ export const usageAPI = {
   getQuotaConfig: () => {
     return fetchAPI('/usage/quota-config');
   },
+  getTokenUsageList: () => {
+    return fetchAPI('/gateway/token/usage');
+  },
 };
 
 // Health check

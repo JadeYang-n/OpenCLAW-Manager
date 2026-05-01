@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 use crate::commands::setup::DeployMode;
+use std::collections::HashMap;
+use std::sync::{LazyLock, Mutex};
 
 /// 部署步骤枚举
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
@@ -22,27 +24,47 @@ pub struct DeploymentStatus {
     pub items: Vec<String>,            // 待修复的环境项
 }
 
+/// 部署进度信息
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[allow(dead_code)]
+pub struct JobProgress {
+    pub job_id: String,
+    pub progress: u8,        // 0-100
+    pub message: String,
+    pub logs: Vec<String>,
+}
+
+/// 全局部署状态（内存中）
+static DEPLOY_STATE: LazyLock<Mutex<Option<DeploymentStatus>>> = LazyLock::new(|| Mutex::new(None));
+
+/// 全局部署任务（内存中）
+static DEPLOY_JOBS: LazyLock<Mutex<HashMap<String, JobProgress>>> = LazyLock::new(|| Mutex::new(HashMap::new()));
+
 /// 获取当前部署状态
 #[tauri::command]
 pub fn get_deployment_status() -> DeploymentStatus {
-    DeploymentStatus {
+    let guard = DEPLOY_STATE.lock().unwrap();
+    guard.clone().unwrap_or_else(|| DeploymentStatus {
         mode: None,
         step: DeployStep::SelectMode,
         message: "请选择部署方式".to_string(),
         items: vec![],
-    }
+    })
 }
 
 /// 设置部署方式
 #[tauri::command]
 pub fn set_deploy_mode(mode: DeployMode) -> Result<DeploymentStatus, String> {
     let mode_name = get_mode_name(&mode);
-    Ok(DeploymentStatus {
+    let status = DeploymentStatus {
         mode: Some(mode),
         step: DeployStep::Checking,
         message: format!("正在检查 {} 环境...", mode_name),
         items: vec![],
-    })
+    };
+    let mut guard = DEPLOY_STATE.lock().unwrap();
+    *guard = Some(status.clone());
+    Ok(status)
 }
 
 /// 获取部署方式名称
@@ -54,22 +76,14 @@ fn get_mode_name(mode: &DeployMode) -> &'static str {
     }
 }
 
-/// 部署进度信息
-#[derive(Serialize, Deserialize, Debug, Clone)]
-#[allow(dead_code)]
-pub struct JobProgress {
-    pub job_id: String,
-    pub progress: u8,        // 0-100
-    pub message: String,
-    pub logs: Vec<String>,
-}
-
 /// 开始一键部署
 #[tauri::command]
 pub fn start_deployment(mode: DeployMode, install_path: Option<String>, port: Option<u16>) -> Result<JobProgress, String> {
-    // 调用 setup.rs 中的部署函数
     use crate::commands::setup::{deploy_windows, deploy_docker, deploy_wsl2, DeployConfig, OpenClawConfig};
-    
+
+    let mode_name = get_mode_name(&mode);
+    let mode_clone = mode.clone();
+
     let config = DeployConfig {
         mode,
         install_path: install_path.unwrap_or_else(|| "C:\\Program Files\\OpenCLAW".to_string()),
@@ -82,12 +96,24 @@ pub fn start_deployment(mode: DeployMode, install_path: Option<String>, port: Op
         },
     };
 
+    // 更新部署状态
+    let status = DeploymentStatus {
+        mode: Some(mode_clone),
+        step: DeployStep::Deploying,
+        message: format!("正在部署 {} 环境...", mode_name),
+        items: vec![],
+    };
+    {
+        let mut guard = DEPLOY_STATE.lock().unwrap();
+        *guard = Some(status);
+    }
+
     let job_id = uuid::Uuid::new_v4().to_string();
 
-    match config.mode {
+    let progress = match config.mode {
         DeployMode::Windows => {
             deploy_windows(config).map(|r| JobProgress {
-                job_id,
+                job_id: job_id.clone(),
                 progress: 100,
                 message: r.message,
                 logs: vec![
@@ -106,7 +132,7 @@ pub fn start_deployment(mode: DeployMode, install_path: Option<String>, port: Op
         },
         DeployMode::Wsl2 => {
             deploy_wsl2(config).map(|r| JobProgress {
-                job_id,
+                job_id: job_id.clone(),
                 progress: 100,
                 message: r.message,
                 logs: vec![
@@ -124,7 +150,7 @@ pub fn start_deployment(mode: DeployMode, install_path: Option<String>, port: Op
         },
         DeployMode::Docker => {
             deploy_docker(config).map(|r| JobProgress {
-                job_id,
+                job_id: job_id.clone(),
                 progress: 100,
                 message: r.message,
                 logs: vec![
@@ -137,18 +163,29 @@ pub fn start_deployment(mode: DeployMode, install_path: Option<String>, port: Op
                 ],
             })
         }
+    }?;
+
+    // 存储任务进度到全局状态
+    {
+        let mut jobs = DEPLOY_JOBS.lock().unwrap();
+        jobs.insert(job_id.clone(), progress.clone());
     }
+
+    // 更新状态为完成
+    {
+        let mut guard = DEPLOY_STATE.lock().unwrap();
+        if let Some(ref mut s) = *guard {
+            s.step = DeployStep::Completed;
+            s.message = "部署已完成".to_string();
+        }
+    }
+
+    Ok(progress)
 }
 
-/// 获取部署日志（轮询接口）
+/// 获取部署日志（从内存中查询）
 #[tauri::command]
 pub fn get_deployment_log(job_id: String) -> Result<JobProgress, String> {
-    // TODO: 从内存/文件存储中查询 job_id 对应的日志
-    // 当前返回 mock 数据，后续替换为真实日志
-    Ok(JobProgress {
-        job_id,
-        progress: 100,
-        message: "部署已完成".to_string(),
-        logs: vec!["开始部署...".to_string(), "检查环境...".to_string(), "部署完成".to_string()],
-    })
+    let jobs = DEPLOY_JOBS.lock().unwrap();
+    jobs.get(&job_id).cloned().ok_or_else(|| format!("未找到任务 {}", job_id))
 }

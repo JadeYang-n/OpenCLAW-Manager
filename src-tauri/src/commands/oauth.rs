@@ -226,25 +226,47 @@ pub fn delete_oauth_config(token: String, provider: String) -> Result<(), String
 #[tauri::command]
 pub fn test_oauth_connection(token: String, provider: String) -> Result<TestResult, String> {
     let conn = db::get_connection().map_err(|e| e.to_string())?;
-    
-    // 验证 token 和权限
+
     let user = auth::verify_token(&token, &conn)?;
     auth::check_permission(&user.role, &["admin", "operator"], "oauth", "test")?;
-    
+
     let config = get_oauth_config(&conn, &provider)?;
-    
-    // 测试连接（简化：只检查配置是否完整）
+
+    // 检查配置完整性
     if config.client_id.is_empty() || config.client_secret.is_empty() {
         return Ok(TestResult {
             success: false,
             message: "Client ID 或 Client Secret 未配置".to_string(),
         });
     }
-    
-    Ok(TestResult {
-        success: true,
-        message: "配置完整，可以正常使用".to_string(),
-    })
+
+    // 实际测试：尝试访问授权 URL（GET 不应返回 404）
+    let client = reqwest::blocking::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    match client.get(&config.auth_url).send() {
+        Ok(resp) => {
+            if resp.status() == reqwest::StatusCode::NOT_FOUND {
+                Ok(TestResult {
+                    success: false,
+                    message: format!("授权 URL 不可达 (HTTP 404)：{}", config.auth_url),
+                })
+            } else {
+                Ok(TestResult {
+                    success: true,
+                    message: format!("授权端点可达 (HTTP {})，可以正常使用", resp.status()),
+                })
+            }
+        }
+        Err(e) => {
+            Ok(TestResult {
+                success: false,
+                message: format!("无法连接授权端点：{} ({})", config.auth_url, e),
+            })
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
